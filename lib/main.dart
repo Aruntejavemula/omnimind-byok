@@ -1446,6 +1446,31 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  
+  void setSidebarTab(String tab) {
+    currentSidebarTab = tab;
+    notifyListeners();
+  }
+
+  void setCurrentProject(String projectId) {
+    currentProjectId = projectId;
+    notifyListeners();
+  }
+
+  void updateProjectMemory(String projectId, String memory) {
+    projectMemory[projectId] = memory;
+    notifyListeners();
+  }
+
+  String getProjectMemory(String projectId) {
+    return projectMemory[projectId] ?? '';
+  }
+
+  void setSelectedModel(String model) {
+    // Update the selected model for the current provider
+    notifyListeners();
+  }
+
   Future<void> bootstrap() async {
     final prefs = await SharedPreferences.getInstance();
     selectedProviderId = prefs.getString('provider') ?? selectedProviderId;
