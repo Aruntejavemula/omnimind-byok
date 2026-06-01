@@ -1777,49 +1777,118 @@ class Sidebar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appControllerProvider);
     return Container(
-      width: 278,
+      width: 72,
       decoration: const BoxDecoration(color: MioTheme.cream2, border: Border(right: BorderSide(color: MioTheme.line))),
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const BrandHeader(),
-              const SizedBox(height: 22),
-              PrimaryNavButton(icon: Icons.add_rounded, label: 'New chat', onTap: app.clearChat),
-              const SizedBox(height: 22),
-              Text('Capabilities', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: MioTheme.muted, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              CapabilityItem(
-                icon: Icons.biotech_rounded,
-                label: 'Deep Research',
-                active: app.deepResearchMode,
-                onTap: app.toggleDeepResearch,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(12), border: Border.all(color: MioTheme.line)),
+                child: const Center(child: BrandMark(size: 32)),
               ),
-              const CapabilityItem(icon: Icons.public_rounded, label: 'Web Search', active: true),
-              const CapabilityItem(icon: Icons.edit_note_rounded, label: 'Notion', active: true),
-              const SizedBox(height: 22),
-              Row(children: [
-                Expanded(child: Text('Workspace', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: MioTheme.muted, fontWeight: FontWeight.w700))),
-                TextButton(onPressed: () => context.go('/projects'), child: const Text('All')),
-              ]),
-              const SizedBox(height: 8),
-              ProjectChip(name: 'Personal', active: true, onTap: () => context.go('/projects/demo')),
-              ProjectChip(name: 'Research', active: false, onTap: () => context.go('/projects')),
-              ProjectChip(name: 'Code', active: false, onTap: () => context.go('/projects')),
-              const SizedBox(height: 18),
-              Text('Settings', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: MioTheme.muted, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              PrimaryNavButton(icon: Icons.settings_rounded, label: 'All settings', onTap: () => context.go('/settings')),
-              const SizedBox(height: 8),
-              PrimaryNavButton(icon: Icons.key_rounded, label: 'API keys', onTap: () => context.go('/settings/api-keys')),
-              const SizedBox(height: 8),
-              PrimaryNavButton(icon: Icons.speed_rounded, label: 'Usage limits', onTap: () => context.go('/settings/usage')),
-              const Spacer(),
-              StatusCard(app: app),
-            ],
-          ),
+            ),
+            const SizedBox(height: 16),
+            _SidebarIconButton(icon: Icons.chat_rounded, label: 'Chat', onTap: () => context.go('/chat')),
+            const SizedBox(height: 12),
+            _SidebarIconButton(icon: Icons.work_rounded, label: 'Projects', onTap: () => context.go('/projects')),
+            const SizedBox(height: 12),
+            _SidebarIconButton(icon: Icons.settings_rounded, label: 'Settings', onTap: () => context.go('/settings')),
+            const Spacer(),
+            _UserProfileButton(app: app),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarIconButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _SidebarIconButton({required this.icon, required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(12), border: Border.all(color: MioTheme.line)),
+          child: Icon(icon, color: MioTheme.orange, size: 24),
+        ),
+      ),
+    );
+  }
+}
+
+class _UserProfileButton extends ConsumerStatefulWidget {
+  final AppController app;
+  const _UserProfileButton({required this.app});
+  @override
+  ConsumerState<_UserProfileButton> createState() => _UserProfileButtonState();
+}
+
+class _UserProfileButtonState extends ConsumerState<_UserProfileButton> {
+  late RelativeRect _menuPosition;
+
+  void _showUserMenu() {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final button = context.findRenderObject() as RenderBox;
+    final topLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
+    _menuPosition = RelativeRect.fromLTRB(topLeft.dx + button.size.width + 8, topLeft.dy, overlay.size.width - topLeft.dx - button.size.width - 8, overlay.size.height - topLeft.dy - button.size.height);
+
+    showMenu<String>(
+      context: context,
+      position: _menuPosition,
+      color: MioTheme.panel,
+      elevation: 12,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: MioTheme.line)),
+      items: [
+        PopupMenuItem<String>(value: 'settings', child: Row(children: [const Icon(Icons.settings_rounded, size: 18, color: MioTheme.orange), const SizedBox(width: 12), const Text('Settings')])),
+        PopupMenuItem<String>(value: 'account', child: Row(children: [const Icon(Icons.person_rounded, size: 18, color: MioTheme.orange), const SizedBox(width: 12), const Text('Account')])),
+        PopupMenuItem<String>(value: 'usage', child: Row(children: [const Icon(Icons.speed_rounded, size: 18, color: MioTheme.orange), const SizedBox(width: 12), const Text('Usage')])),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(value: 'logout', child: Row(children: [const Icon(Icons.logout_rounded, size: 18, color: Color(0xFFCC5801)), const SizedBox(width: 12), const Text('Log out')])),
+      ],
+    ).then((value) {
+      if (value == null) return;
+      switch (value) {
+        case 'settings':
+          context.go('/settings');
+          break;
+        case 'account':
+          context.go('/settings/account');
+          break;
+        case 'usage':
+          context.go('/settings/usage');
+          break;
+        case 'logout':
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Logout not yet implemented')));
+          break;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'User menu',
+      child: InkWell(
+        onTap: _showUserMenu,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(12), border: Border.all(color: MioTheme.line)),
+          child: const Icon(Icons.account_circle_rounded, color: MioTheme.orange, size: 24),
         ),
       ),
     );
@@ -2453,8 +2522,10 @@ class RestoredFeatureScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (spec.path == '/settings/api-keys') return const RestoredApiKeysScreen();
     if (spec.path == '/settings/subscription') return const RestoredSubscriptionScreen();
-    if (spec.path == '/settings/usage') return const RestoredUsageLimitsScreen();
+    if (spec.path == '/settings/usage') return const ModernUsageScreen();
     if (spec.path == '/settings/preferences') return const RestoredPreferencesScreen();
+    if (spec.path == '/settings/account') return const ModernAccountScreen();
+    if (spec.path == '/settings/devices') return const ModernDevicesScreen();
     final siblings = restoredScreens.where((s) => s.section == spec.section && s.path != spec.path).take(5).toList();
     return RestoredScreenScaffold(
       title: spec.title,
@@ -2645,6 +2716,328 @@ class RestoredSubscriptionScreen extends StatelessWidget {
           ))).toList());
         }),
       ]),
+    );
+  }
+}
+
+// --- Modern Settings Screens ---
+
+class ModernAccountScreen extends ConsumerStatefulWidget {
+  const ModernAccountScreen({super.key});
+  @override
+  ConsumerState<ModernAccountScreen> createState() => _ModernAccountScreenState();
+}
+
+class _ModernAccountScreenState extends ConsumerState<ModernAccountScreen> {
+  late TextEditingController _nameController;
+  late TextEditingController _emailController;
+  late TextEditingController _usernameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: 'Arunteja');
+    _emailController = TextEditingController(text: 'arunteja@example.com');
+    _usernameController = TextEditingController(text: 'arunteja');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: MioTheme.cream,
+      appBar: AppBar(
+        backgroundColor: MioTheme.cream,
+        elevation: 0,
+        title: const Text('Account', style: TextStyle(fontWeight: FontWeight.w900)),
+        leading: IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: () => context.canPop() ? context.pop() : context.go('/chat')),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                Text('PROFILE', style: const TextStyle(color: MioTheme.orange, fontWeight: FontWeight.w900, letterSpacing: .8, fontSize: 12)),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(20), border: Border.all(color: MioTheme.line)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Full name', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _nameController,
+                        decoration: InputDecoration(
+                          hintText: 'Enter your full name',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text('Email', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _emailController,
+                        decoration: InputDecoration(
+                          hintText: 'your.email@example.com',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text('Username', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _usernameController,
+                        decoration: InputDecoration(
+                          hintText: 'username',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          FilledButton(onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated'))), child: const Text('Save changes')),
+                          const SizedBox(width: 12),
+                          OutlinedButton(onPressed: () {}, child: const Text('Forgot password?')),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text('ACCOUNT ACTIONS', style: const TextStyle(color: MioTheme.orange, fontWeight: FontWeight.w900, letterSpacing: .8, fontSize: 12)),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(20), border: Border.all(color: MioTheme.line)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Log out of all devices', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      const SizedBox(height: 8),
+                      const Text('This will sign you out on all your devices.', style: TextStyle(color: MioTheme.muted, fontSize: 13)),
+                      const SizedBox(height: 12),
+                      FilledButton.tonal(onPressed: () {}, child: const Text('Log out of all devices')),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ModernDevicesScreen extends StatelessWidget {
+  const ModernDevicesScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final devices = [
+      ('Chrome (Windows)', 'Charlotte, North Carolina', 'Apr 27, 2026, 2:46 PM', 'Jun 1, 2026, 4:56 PM', true),
+      ('Claude Desktop', 'Charlotte, North Carolina', 'Apr 27, 2026, 2:55 PM', 'May 18, 2026, 11:57 AM', false),
+      ('Claude (iOS)', 'Charlotte, North Carolina', 'Apr 18, 2026, 4:55 AM', 'Jun 1, 2026, 12:21 PM', false),
+    ];
+
+    return Scaffold(
+      backgroundColor: MioTheme.cream,
+      appBar: AppBar(
+        backgroundColor: MioTheme.cream,
+        elevation: 0,
+        title: const Text('Devices', style: TextStyle(fontWeight: FontWeight.w900)),
+        leading: IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: () => context.canPop() ? context.pop() : context.go('/chat')),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                Text('ACTIVE SESSIONS', style: const TextStyle(color: MioTheme.orange, fontWeight: FontWeight.w900, letterSpacing: .8, fontSize: 12)),
+                const SizedBox(height: 16),
+                ...devices.map((device) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: device.$5 ? MioTheme.orange : MioTheme.line, width: device.$5 ? 2 : 1)),
+                    child: Row(
+                      children: [
+                        Icon(device.$1.contains('Chrome') ? Icons.devices_rounded : Icons.phone_iphone_rounded, color: MioTheme.orange, size: 24),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(device.$1, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                                  const SizedBox(width: 8),
+                                  if (device.$5) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.12), borderRadius: BorderRadius.circular(6)), child: const Text('Current', style: TextStyle(color: MioTheme.orange, fontSize: 11, fontWeight: FontWeight.w700))),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(device.$2, style: const TextStyle(color: MioTheme.muted, fontSize: 12)),
+                              const SizedBox(height: 4),
+                              Text('Created: ${device.$3} • Updated: ${device.$4}', style: const TextStyle(color: MioTheme.muted, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                        if (!device.$5) IconButton(icon: const Icon(Icons.more_vert_rounded), onPressed: () {}),
+                      ],
+                    ),
+                  ),
+                )),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ModernUsageScreen extends ConsumerWidget {
+  const ModernUsageScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final app = ref.watch(appControllerProvider);
+
+    return Scaffold(
+      backgroundColor: MioTheme.cream,
+      appBar: AppBar(
+        backgroundColor: MioTheme.cream,
+        elevation: 0,
+        title: const Text('Usage', style: TextStyle(fontWeight: FontWeight.w900)),
+        leading: IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: () => context.canPop() ? context.pop() : context.go('/chat')),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1000),
+            child: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                Text('USAGE OVERVIEW', style: const TextStyle(color: MioTheme.orange, fontWeight: FontWeight.w900, letterSpacing: .8, fontSize: 12)),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: MioTheme.line)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.chat_bubble_rounded, color: MioTheme.orange, size: 28),
+                            const SizedBox(height: 12),
+                            Text('${app.messages.length}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+                            const SizedBox(height: 4),
+                            const Text('Messages this session', style: TextStyle(color: MioTheme.muted, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: MioTheme.line)),
+                        child: const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.speed_rounded, color: MioTheme.orange, size: 28),
+                            SizedBox(height: 12),
+                            Text('Unlimited', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+                            SizedBox(height: 4),
+                            Text('Current session limit', style: TextStyle(color: MioTheme.muted, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: MioTheme.line)),
+                        child: const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.calendar_month_rounded, color: MioTheme.orange, size: 28),
+                            SizedBox(height: 12),
+                            Text('12 days', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+                            SizedBox(height: 4),
+                            Text('Active days this month', style: TextStyle(color: MioTheme.muted, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Text('DAILY ACTIVITY HEATMAP', style: const TextStyle(color: MioTheme.orange, fontWeight: FontWeight.w900, letterSpacing: .8, fontSize: 12)),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: MioTheme.line)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Last 12 weeks', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 100,
+                        child: GridView.builder(
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 12, crossAxisSpacing: 4, mainAxisSpacing: 4),
+                          itemCount: 84,
+                          itemBuilder: (context, index) {
+                            final intensity = (index % 7 + 1) / 7;
+                            final isActive = index % 3 != 0;
+                            return Container(
+                              decoration: BoxDecoration(
+                                color: isActive ? MioTheme.orange.withOpacity(intensity) : MioTheme.cream2,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: MioTheme.line.withOpacity(.3)),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          const Text('Less', style: TextStyle(color: MioTheme.muted, fontSize: 11)),
+                          const SizedBox(width: 8),
+                          ...List.generate(5, (i) => Container(width: 12, height: 12, decoration: BoxDecoration(color: MioTheme.orange.withOpacity((i + 1) / 5), borderRadius: BorderRadius.circular(2), border: Border.all(color: MioTheme.line.withOpacity(.3))))),
+                          const SizedBox(width: 8),
+                          const Text('More', style: TextStyle(color: MioTheme.muted, fontSize: 11)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
