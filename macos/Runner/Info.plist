@@ -24,6 +24,14 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Mio uses your camera only when you choose Camera from the attach menu.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Mio uses your photo library only when you choose Gallery from the attach menu.</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>Mio uses notifications only for task completion, reminders, and scheduled summaries you enable.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Mio accesses documents only when you choose Document from the attach menu.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

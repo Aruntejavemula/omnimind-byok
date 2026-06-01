@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -352,6 +353,14 @@ class AppController extends ChangeNotifier {
     final clean = url.trim();
     if (clean.isEmpty) return;
     _addAttachmentMessage('Link attached', clean, clean);
+  }
+
+  void enableNotificationsNotice() {
+    _addAssistantNotice('Notifications enabled. Mio can use them for task completion, reminders, and scheduled summaries once those workflows are active.');
+  }
+
+  void permissionDeniedNotice(String permissionName) {
+    _addAssistantNotice('$permissionName permission was not granted. You can enable it later in system settings.');
   }
 
   void _addAttachmentMessage(String title, String name, String value) {
@@ -953,6 +962,73 @@ class Avatar extends StatelessWidget {
 class Composer extends ConsumerWidget {
   const Composer({super.key});
 
+  Future<bool> _confirmAndRequestPermission(
+    BuildContext context,
+    Permission permission,
+    String title,
+    String body,
+  ) async {
+    final explain = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Not now')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Allow')),
+        ],
+      ),
+    );
+    if (explain != true) return false;
+    final status = await permission.request();
+    if (status.isGranted || status.isLimited) return true;
+    if (status.isPermanentlyDenied && context.mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Permission blocked'),
+          content: const Text('Open system settings to allow this permission for Mio.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            FilledButton(onPressed: () { openAppSettings(); Navigator.pop(context); }, child: const Text('Open Settings')),
+          ],
+        ),
+      );
+    }
+    return false;
+  }
+
+  Future<void> _runWithPermission(
+    BuildContext context,
+    AppController app,
+    Permission permission,
+    String title,
+    String body,
+    String deniedLabel,
+    Future<void> Function() action,
+  ) async {
+    final allowed = await _confirmAndRequestPermission(context, permission, title, body);
+    if (!allowed) {
+      app.permissionDeniedNotice(deniedLabel);
+      return;
+    }
+    await action();
+  }
+
+  Future<void> _enableNotifications(BuildContext context, AppController app) async {
+    final allowed = await _confirmAndRequestPermission(
+      context,
+      Permission.notification,
+      'Allow notifications?',
+      'Mio will only notify you for task completion, reminders, and scheduled summaries you enable.',
+    );
+    if (allowed) {
+      app.enableNotificationsNotice();
+    } else {
+      app.permissionDeniedNotice('Notifications');
+    }
+  }
+
   void _showLinkDialog(BuildContext context, AppController app) {
     final controller = TextEditingController();
     showDialog<void>(
@@ -984,9 +1060,9 @@ class Composer extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _AttachmentItem(icon: Icons.camera_alt_rounded, label: 'Camera', onTap: () { Navigator.pop(context); app.attachCamera(); }),
-                  _AttachmentItem(icon: Icons.photo_library_rounded, label: 'Gallery', onTap: () { Navigator.pop(context); app.attachGallery(); }),
-                  _AttachmentItem(icon: Icons.description_rounded, label: 'Document', onTap: () { Navigator.pop(context); app.attachDocument(); }),
+                  _AttachmentItem(icon: Icons.camera_alt_rounded, label: 'Camera', onTap: () { Navigator.pop(context); _runWithPermission(context, app, Permission.camera, 'Allow camera?', 'Mio needs camera access only when you attach a new photo to the chat.', 'Camera', app.attachCamera); }),
+                  _AttachmentItem(icon: Icons.photo_library_rounded, label: 'Gallery', onTap: () { Navigator.pop(context); _runWithPermission(context, app, Permission.photos, 'Allow photo library?', 'Mio needs photo access only when you attach images from your gallery.', 'Gallery', app.attachGallery); }),
+                  _AttachmentItem(icon: Icons.description_rounded, label: 'Document', onTap: () { Navigator.pop(context); _runWithPermission(context, app, Permission.storage, 'Allow document access?', 'Mio opens the system file picker only when you choose documents to attach.', 'Documents', app.attachDocument); }),
                   _AttachmentItem(icon: Icons.link_rounded, label: 'Link', onTap: () { Navigator.pop(context); _showLinkDialog(context, app); }),
                 ],
               ),
@@ -1002,6 +1078,7 @@ class Composer extends ConsumerWidget {
                   _AttachmentItem(icon: Icons.edit_note_rounded, label: 'Notion', onTap: () { Navigator.pop(context); app.runNotionConnector(); }),
                   _AttachmentItem(icon: Icons.folder_zip_rounded, label: 'GitHub', onTap: () { Navigator.pop(context); app.runGitHubConnector(); }),
                   _AttachmentItem(icon: Icons.mail_rounded, label: 'Gmail', onTap: () { Navigator.pop(context); app.runGmailConnector(); }),
+                  _AttachmentItem(icon: Icons.notifications_rounded, label: 'Notify', onTap: () { Navigator.pop(context); _enableNotifications(context, app); }),
                 ],
               ),
               const SizedBox(height: 12),
