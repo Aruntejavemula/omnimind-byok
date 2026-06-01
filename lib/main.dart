@@ -46,6 +46,7 @@ class OmnimindApp extends ConsumerWidget {
       routes: [
         GoRoute(path: '/', builder: (_, __) => const SplashScreen()),
         GoRoute(path: '/welcome', builder: (_, __) => const WelcomeLoginScreen()),
+        GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
         GoRoute(path: '/chat', builder: (_, __) => const ShellScreen()),
       ],
     );
@@ -143,8 +144,15 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     await _exitController.forward();
     final prefs = await SharedPreferences.getInstance();
     final completedWelcome = prefs.getBool('mio_welcome_complete') ?? false;
+    final completedOnboarding = prefs.getBool('mio_onboarding_complete') ?? false;
     if (!mounted) return;
-    context.go(completedWelcome ? '/chat' : '/welcome');
+    if (!completedWelcome) {
+      context.go('/welcome');
+    } else if (!completedOnboarding) {
+      context.go('/onboarding');
+    } else {
+      context.go('/chat');
+    }
   }
 
   @override
@@ -198,7 +206,7 @@ class _WelcomeLoginScreenState extends State<WelcomeLoginScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('mio_welcome_complete', true);
     if (!mounted) return;
-    context.go('/chat');
+    context.go('/onboarding');
   }
 
   Future<void> _confirmLocalFirst() async {
@@ -355,6 +363,498 @@ class _WelcomePoint extends StatelessWidget {
     );
   }
 }
+
+
+class OnboardingScreen extends StatefulWidget {
+  const OnboardingScreen({super.key});
+
+  @override
+  State<OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends State<OnboardingScreen> with TickerProviderStateMixin {
+  static const int _totalPages = 8;
+
+  final _pageController = PageController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _apiKeyController = TextEditingController();
+  final _storage = const FlutterSecureStorage();
+
+  late final AnimationController _entryController;
+  late final AnimationController _celebrationController;
+
+  int _currentPage = 0;
+  String _selectedProviderId = 'openrouter';
+  String? _nameError;
+  String? _selectedPlan = 'free';
+  bool _isKeyVisible = false;
+  final Set<String> _preferences = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _entryController = AnimationController(vsync: this, duration: const Duration(milliseconds: 520))..forward();
+    _celebrationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _apiKeyController.dispose();
+    _entryController.dispose();
+    _celebrationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _nextPage() async {
+    if (_currentPage == 0 && _firstNameController.text.trim().isEmpty) {
+      setState(() => _nameError = 'Please enter your first name to continue.');
+      return;
+    }
+    if (_currentPage == 0) await _saveName();
+    if (_currentPage == 4) await _savePreferences();
+    if (_currentPage == 5) await _savePendingKey();
+    if (_currentPage < _totalPages - 1) {
+      _goToPage(_currentPage + 1);
+    } else {
+      await _completeOnboarding();
+    }
+  }
+
+  void _goToPage(int page) {
+    _pageController.animateToPage(page, duration: const Duration(milliseconds: 420), curve: Curves.easeOutCubic);
+    setState(() => _currentPage = page);
+    _entryController
+      ..reset()
+      ..forward();
+    if (page == _totalPages - 1) _celebrationController.forward(from: 0);
+  }
+
+  Future<void> _saveName() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_first_name', _firstNameController.text.trim());
+    await prefs.setString('user_last_name', _lastNameController.text.trim());
+  }
+
+  Future<void> _savePreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('mio_onboarding_preferences', _preferences.toList());
+  }
+
+  Future<void> _savePendingKey() async {
+    final key = _apiKeyController.text.trim();
+    if (key.isNotEmpty) {
+      await _storage.write(key: 'provider_key_$_selectedProviderId', value: key);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('provider', _selectedProviderId);
+    }
+  }
+
+  Future<void> _completeOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('mio_onboarding_complete', true);
+    await prefs.setString('mio_onboarding_plan', _selectedPlan ?? 'free');
+    if (!mounted) return;
+    context.go('/chat');
+  }
+
+  String get _firstName => _firstNameController.text.trim();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: MioTheme.cream,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: CustomPaint(painter: _OnboardingBackgroundPainter()),
+            ),
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 980),
+                child: Padding(
+                  padding: const EdgeInsets.all(22),
+                  child: Column(
+                    children: [
+                      _buildTopBar(),
+                      Expanded(
+                        child: PageView(
+                          controller: _pageController,
+                          physics: const NeverScrollableScrollPhysics(),
+                          children: [
+                            _pageName(),
+                            _pageProblem(),
+                            _pageSolution(),
+                            _pageByok(),
+                            _pagePreferences(),
+                            _pageAddKey(),
+                            _pagePricing(),
+                            _pageReady(),
+                          ],
+                        ),
+                      ),
+                      _buildBottomBar(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Row(
+      children: [
+        const BrandMark(size: 42),
+        const SizedBox(width: 12),
+        Text('Mio setup', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+        const Spacer(),
+        if (_currentPage > 0 && _currentPage < 7)
+          TextButton(onPressed: () => _goToPage(7), child: const Text('Skip to ready')),
+      ],
+    );
+  }
+
+  Widget _buildBottomBar() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(_totalPages, (i) {
+              final active = i == _currentPage;
+              final done = i < _currentPage;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                width: active ? 30 : 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: active || done ? MioTheme.orange : MioTheme.line,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              if (_currentPage > 0)
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _goToPage(_currentPage - 1),
+                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                    child: const Text('Back'),
+                  ),
+                ),
+              if (_currentPage > 0) const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: FilledButton(
+                  onPressed: _nextPage,
+                  style: FilledButton.styleFrom(backgroundColor: MioTheme.orange, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                  child: Text(_currentPage == _totalPages - 1 ? 'Enter Mio' : 'Continue', style: const TextStyle(fontWeight: FontWeight.w900)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _shell({required String label, required String title, required String subtitle, required Widget child}) {
+    return FadeTransition(
+      opacity: CurvedAnimation(parent: _entryController, curve: Curves.easeOut),
+      child: Center(
+        child: SingleChildScrollView(
+          child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 18),
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: MioTheme.panel.withOpacity(.94),
+              borderRadius: BorderRadius.circular(32),
+              border: Border.all(color: MioTheme.line),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(.06), blurRadius: 30, offset: const Offset(0, 18))],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _stepLabel(label),
+                const SizedBox(height: 18),
+                Text(title, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -.8, height: 1.05)),
+                const SizedBox(height: 12),
+                Text(subtitle, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: MioTheme.muted, height: 1.5)),
+                const SizedBox(height: 24),
+                child,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _stepLabel(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.12), borderRadius: BorderRadius.circular(999)),
+      child: Text(text, style: const TextStyle(color: MioTheme.orange, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: .5)),
+    );
+  }
+
+  Widget _pageName() => _shell(
+        label: 'START',
+        title: 'What should Mio call you?',
+        subtitle: 'Personalize the workspace without making setup heavy.',
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(child: _field(_firstNameController, 'First name', Icons.person_outline_rounded, errorText: _nameError, onChanged: (_) => setState(() => _nameError = null))),
+                const SizedBox(width: 12),
+                Expanded(child: _field(_lastNameController, 'Last name', Icons.badge_outlined)),
+              ],
+            ),
+          ],
+        ),
+      );
+
+  Widget _pageProblem() => _shell(
+        label: 'THE PROBLEM',
+        title: 'Most AI apps talk too much and hide the cost.',
+        subtitle: 'You should not fight bloated prompts, surprise usage, or locked-in providers just to get direct work done.',
+        child: Column(children: const [
+          _OnboardingPoint(icon: Icons.chat_bubble_outline_rounded, title: 'Too much filler', text: 'Generic assistants waste time with greetings and padded answers.'),
+          _OnboardingPoint(icon: Icons.lock_outline_rounded, title: 'Provider lock-in', text: 'One backend decides your models, pricing, and limits.'),
+          _OnboardingPoint(icon: Icons.receipt_long_rounded, title: 'Unclear spending', text: 'Subscriptions often hide what each model call actually costs.'),
+        ]),
+      );
+
+  Widget _pageSolution() => _shell(
+        label: 'THE SOLUTION',
+        title: 'Mio is a direct, local-first AI workspace.',
+        subtitle: 'It is built around fast answers, transparent provider choice, and a clean workspace that gets out of your way.',
+        child: Wrap(spacing: 12, runSpacing: 12, children: const [
+          _FeatureChip(icon: Icons.flash_on_rounded, label: 'Zero fluff'),
+          _FeatureChip(icon: Icons.folder_copy_outlined, label: 'Projects'),
+          _FeatureChip(icon: Icons.attach_file_rounded, label: 'Attachments'),
+          _FeatureChip(icon: Icons.travel_explore_rounded, label: 'Web research'),
+          _FeatureChip(icon: Icons.sync_lock_rounded, label: 'Optional sync'),
+        ]),
+      );
+
+  Widget _pageByok() => _shell(
+        label: 'BYOK',
+        title: 'Bring your own key. Keep control.',
+        subtitle: 'Use OpenAI, Anthropic, Gemini, OpenRouter, local models, or another compatible provider. Your provider keys stay in secure device storage.',
+        child: Column(children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: providers.take(9).map((p) => Chip(label: Text(p.name), avatar: const Icon(Icons.auto_awesome_rounded, size: 16), side: const BorderSide(color: MioTheme.line), backgroundColor: MioTheme.cream2)).toList(),
+          ),
+          const SizedBox(height: 16),
+          const _OnboardingNotice(icon: Icons.privacy_tip_outlined, text: 'Mio should never log, sync, or expose provider keys unless the user explicitly enables encrypted sync.'),
+        ]),
+      );
+
+  Widget _pagePreferences() {
+    final items = ['Coding', 'Writing', 'Learning', 'Work', 'Creative', 'Research', 'Chat', 'Math'];
+    return _shell(
+      label: 'PERSONALIZE',
+      title: 'What will you use AI for?',
+      subtitle: 'Pick a few focus areas so Mio can shape the default workspace around your habits.',
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: items.map((item) {
+          final selected = _preferences.contains(item);
+          return FilterChip(
+            selected: selected,
+            label: Text(item, style: TextStyle(fontWeight: selected ? FontWeight.w900 : FontWeight.w700)),
+            selectedColor: MioTheme.orange.withOpacity(.16),
+            checkmarkColor: MioTheme.orange,
+            backgroundColor: MioTheme.cream2,
+            side: BorderSide(color: selected ? MioTheme.orange : MioTheme.line),
+            onSelected: (_) => setState(() => selected ? _preferences.remove(item) : _preferences.add(item)),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _pageAddKey() => _shell(
+        label: 'CONNECT',
+        title: 'Add an API key now, or do it later.',
+        subtitle: 'This step is optional. If you paste a key, Mio saves it only to secure device storage for the selected provider.',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<String>(
+              value: _selectedProviderId,
+              decoration: _inputDecoration('Provider', Icons.hub_outlined),
+              items: providers.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))).toList(),
+              onChanged: (value) => setState(() => _selectedProviderId = value ?? _selectedProviderId),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _apiKeyController,
+              obscureText: !_isKeyVisible,
+              decoration: _inputDecoration('API key optional', Icons.key_rounded).copyWith(
+                suffixIcon: IconButton(icon: Icon(_isKeyVisible ? Icons.visibility_off : Icons.visibility), onPressed: () => setState(() => _isKeyVisible = !_isKeyVisible)),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const _OnboardingNotice(icon: Icons.info_outline_rounded, text: 'You can skip this and add keys later from settings. Local-first users keep keys on this device only.'),
+          ],
+        ),
+      );
+
+  Widget _pagePricing() => _shell(
+        label: 'PLAN',
+        title: 'Choose how you want to start.',
+        subtitle: 'For now, keep Mio honest: local-first and BYOK are available first. Pro can be wired later when billing is ready.',
+        child: Column(children: [
+          _PlanTile(title: 'Free / Local-first', subtitle: 'Use Mio on this device with your own keys. No cross-device sync until sign-in and Supabase are configured.', selected: _selectedPlan == 'free', onTap: () => setState(() => _selectedPlan = 'free')),
+          const SizedBox(height: 12),
+          _PlanTile(title: 'Pro later', subtitle: 'Placeholder for future sync, advanced connectors, and subscription features after billing is implemented.', selected: _selectedPlan == 'pro_later', onTap: () => setState(() => _selectedPlan = 'pro_later')),
+        ]),
+      );
+
+  Widget _pageReady() => _shell(
+        label: 'READY',
+        title: _firstName.isEmpty ? 'Mio is ready.' : 'Mio is ready, $_firstName.',
+        subtitle: 'Your workspace is set. Ask directly, switch providers when needed, and keep control of your keys.',
+        child: Center(
+          child: Column(
+            children: [
+              ScaleTransition(scale: Tween<double>(begin: .92, end: 1.0).animate(CurvedAnimation(parent: _celebrationController, curve: Curves.elasticOut)), child: const BrandMark(size: 118)),
+              const SizedBox(height: 18),
+              Text('No yapping. Just useful answers.', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: MioTheme.orange)),
+            ],
+          ),
+        ),
+      );
+
+  Widget _field(TextEditingController controller, String label, IconData icon, {String? errorText, ValueChanged<String>? onChanged}) {
+    return TextField(controller: controller, onChanged: onChanged, decoration: _inputDecoration(label, icon).copyWith(errorText: errorText));
+  }
+
+  InputDecoration _inputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon),
+      filled: true,
+      fillColor: MioTheme.cream2.withOpacity(.68),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: MioTheme.line)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: MioTheme.line)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: MioTheme.orange, width: 1.4)),
+    );
+  }
+}
+
+class _OnboardingPoint extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String text;
+  const _OnboardingPoint({required this.icon, required this.title, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(width: 42, height: 42, decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.11), borderRadius: BorderRadius.circular(14)), child: Icon(icon, color: MioTheme.orange)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.w900)), const SizedBox(height: 3), Text(text, style: const TextStyle(color: MioTheme.muted, height: 1.4))])),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeatureChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _FeatureChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(color: MioTheme.cream2, borderRadius: BorderRadius.circular(999), border: Border.all(color: MioTheme.line)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, color: MioTheme.orange, size: 18), const SizedBox(width: 8), Text(label, style: const TextStyle(fontWeight: FontWeight.w800))]),
+    );
+  }
+}
+
+class _OnboardingNotice extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _OnboardingNotice({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.09), borderRadius: BorderRadius.circular(16), border: Border.all(color: MioTheme.orange.withOpacity(.22))),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, color: MioTheme.orange), const SizedBox(width: 10), Expanded(child: Text(text, style: const TextStyle(color: MioTheme.ink, height: 1.4, fontWeight: FontWeight.w600)))]),
+    );
+  }
+}
+
+class _PlanTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+  const _PlanTile({required this.title, required this.subtitle, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(color: selected ? MioTheme.orange.withOpacity(.12) : MioTheme.cream2, borderRadius: BorderRadius.circular(20), border: Border.all(color: selected ? MioTheme.orange : MioTheme.line, width: selected ? 1.6 : 1)),
+        child: Row(children: [Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off, color: selected ? MioTheme.orange : MioTheme.muted), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.w900)), const SizedBox(height: 4), Text(subtitle, style: const TextStyle(color: MioTheme.muted, height: 1.35))]))]),
+      ),
+    );
+  }
+}
+
+class _OnboardingBackgroundPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..style = PaintingStyle.fill;
+    paint.color = MioTheme.orange.withOpacity(.08);
+    canvas.drawCircle(Offset(size.width * .1, size.height * .15), 120, paint);
+    paint.color = MioTheme.orange2.withOpacity(.06);
+    canvas.drawCircle(Offset(size.width * .88, size.height * .22), 160, paint);
+    paint.color = Colors.white.withOpacity(.34);
+    canvas.drawCircle(Offset(size.width * .76, size.height * .86), 220, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 
 class MioTheme {
   static const cream = Color(0xFFF6F1E8);

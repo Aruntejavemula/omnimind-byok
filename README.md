@@ -57,7 +57,7 @@ Run `supabase_schema.sql` in your Supabase SQL editor. The schema stores project
 | Notion Connector | Notion integration token or OAuth app credentials. |
 | Gmail Connector | Google OAuth setup with Gmail API access and approved scopes. |
 
-The current startup/onboarding flow has **two pre-chat screens**: Splash and Welcome/Login. The router has **three total app routes**: `/`, `/welcome`, and `/chat`.
+The current startup/onboarding flow is **Splash → Welcome/Login → 8-step Onboarding → Chat**. The router has **four total app routes**: `/`, `/welcome`, `/onboarding`, and `/chat`.
 
 ## Security rule
 

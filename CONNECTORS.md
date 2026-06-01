@@ -31,4 +31,4 @@ For production Gmail and Notion, the correct implementation is OAuth with a Supa
 | Google Login | Google OAuth client ID/secret with Supabase redirect URL configured. | Needed |
 | Apple Login | Apple Developer Services ID, Team ID, Key ID, private key, and Supabase redirect URL configured. | Needed |
 
-The current onboarding route count is **three app routes**: `/` for the animated splash screen, `/welcome` for the combined login/onboarding screen, and `/chat` for the main app. The actual onboarding before chat is **two screens**: Splash followed by Welcome/Login.
+The current onboarding route count is **four app routes**: `/` for the animated splash screen, `/welcome` for the login entry screen, `/onboarding` for the restored eight-step onboarding flow, and `/chat` for the main app. The actual pre-chat journey is Splash → Welcome/Login → 8-step Onboarding.
