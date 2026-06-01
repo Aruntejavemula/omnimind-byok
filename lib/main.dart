@@ -2545,29 +2545,71 @@ class RestoredSettingsHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final groups = <String, List<RestoredScreenData>>{};
-    for (final screen in restoredScreens.where((s) => s.path.startsWith('/settings/'))) {
-      groups.putIfAbsent(screen.section, () => <RestoredScreenData>[]).add(screen);
-    }
-    return RestoredScreenScaffold(
-      title: 'Settings',
-      section: 'Complete app settings',
-      description: 'The full legacy settings structure is restored here: preferences, API keys, usage limits, subscription, devices, storage, connectors, memory, scheduled tasks, referrals, security, and data controls.',
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        RestoredHeroPanel(icon: Icons.settings_rounded, title: 'All settings restored', body: 'This page replaces the old single API-key dialog with the complete settings hub while keeping provider-key functionality available under API Keys.'),
-        const SizedBox(height: 18),
-        for (final entry in groups.entries) ...[
-          Padding(padding: const EdgeInsets.only(top: 10, bottom: 8), child: Text(entry.key, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900))),
-          LayoutBuilder(builder: (context, constraints) {
-            final compact = constraints.maxWidth < 720;
-            return Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: entry.value.map((screen) => SizedBox(width: compact ? constraints.maxWidth : (constraints.maxWidth - 24) / 3, child: RestoredNavigationCard(screen: screen))).toList(),
-            );
-          }),
-        ],
-      ]),
+    return Scaffold(
+      backgroundColor: MioTheme.cream,
+      appBar: AppBar(
+        backgroundColor: MioTheme.cream,
+        elevation: 0,
+        title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.w900)),
+        leading: IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: () => context.canPop() ? context.pop() : context.go('/chat')),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                _SettingsCard(icon: Icons.person_rounded, title: 'Account', subtitle: 'Profile, email, username', onTap: () => context.go('/settings/account')),
+                const SizedBox(height: 12),
+                _SettingsCard(icon: Icons.tune_rounded, title: 'Preferences', subtitle: 'Response style and defaults', onTap: () => context.go('/settings/preferences')),
+                const SizedBox(height: 12),
+                _SettingsCard(icon: Icons.key_rounded, title: 'API Keys', subtitle: 'Manage provider keys', onTap: () => context.go('/settings/api-keys')),
+                const SizedBox(height: 12),
+                _SettingsCard(icon: Icons.speed_rounded, title: 'Usage', subtitle: 'Daily, weekly, monthly stats', onTap: () => context.go('/settings/usage')),
+                const SizedBox(height: 12),
+                _SettingsCard(icon: Icons.devices_rounded, title: 'Devices', subtitle: 'Active sessions', onTap: () => context.go('/settings/devices')),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  const _SettingsCard({required this.icon, required this.title, required this.subtitle, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: MioTheme.line)),
+        child: Row(
+          children: [
+            Icon(icon, color: MioTheme.orange, size: 28),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: const TextStyle(color: MioTheme.muted, fontSize: 13)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: MioTheme.muted),
+          ],
+        ),
+      ),
     );
   }
 }
