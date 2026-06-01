@@ -15,6 +15,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -41,8 +42,11 @@ class OmnimindApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = GoRouter(
+      initialLocation: '/',
       routes: [
-        GoRoute(path: '/', builder: (_, __) => const ShellScreen()),
+        GoRoute(path: '/', builder: (_, __) => const SplashScreen()),
+        GoRoute(path: '/welcome', builder: (_, __) => const WelcomeLoginScreen()),
+        GoRoute(path: '/chat', builder: (_, __) => const ShellScreen()),
       ],
     );
     return MaterialApp.router(
@@ -66,6 +70,247 @@ class OmnimindApp extends ConsumerWidget {
 
 class FocusInputIntent extends Intent {
   const FocusInputIntent();
+}
+
+
+class BrandMark extends StatelessWidget {
+  final double size;
+  final bool animate;
+  final bool repeat;
+
+  const BrandMark({super.key, this.size = 48, this.animate = true, this.repeat = true});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Lottie.asset(
+        'assets/animations/mascot.json',
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        animate: animate,
+        repeat: repeat,
+        errorBuilder: (context, error, stackTrace) => Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: MioTheme.orange,
+            borderRadius: BorderRadius.circular(size * .28),
+            boxShadow: [BoxShadow(color: MioTheme.orange.withOpacity(.24), blurRadius: 24, offset: const Offset(0, 10))],
+          ),
+          child: Center(
+            child: Text(
+              'M',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: size * .42),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
+  late final AnimationController _entryController;
+  late final AnimationController _exitController;
+  late final Animation<double> _scale;
+  late final Animation<double> _fade;
+  late final Animation<double> _exitFade;
+
+  @override
+  void initState() {
+    super.initState();
+    _entryController = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
+    _exitController = AnimationController(vsync: this, duration: const Duration(milliseconds: 360));
+    _scale = Tween<double>(begin: .72, end: 1).animate(CurvedAnimation(parent: _entryController, curve: Curves.easeOutBack));
+    _fade = CurvedAnimation(parent: _entryController, curve: Curves.easeOutCubic);
+    _exitFade = Tween<double>(begin: 1, end: 0).animate(CurvedAnimation(parent: _exitController, curve: Curves.easeInCubic));
+    _entryController.forward();
+    Future.delayed(const Duration(milliseconds: 1850), _routeNext);
+  }
+
+  Future<void> _routeNext() async {
+    if (!mounted) return;
+    await _exitController.forward();
+    final prefs = await SharedPreferences.getInstance();
+    final completedWelcome = prefs.getBool('mio_welcome_complete') ?? false;
+    if (!mounted) return;
+    context.go(completedWelcome ? '/chat' : '/welcome');
+  }
+
+  @override
+  void dispose() {
+    _entryController.dispose();
+    _exitController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: MioTheme.cream,
+      body: FadeTransition(
+        opacity: _exitFade,
+        child: Center(
+          child: ScaleTransition(
+            scale: _scale,
+            child: FadeTransition(
+              opacity: _fade,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const BrandMark(size: 142),
+                  const SizedBox(height: 22),
+                  Text('Mio', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -.8)),
+                  const SizedBox(height: 6),
+                  Text('Think. Not yap.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: MioTheme.muted, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class WelcomeLoginScreen extends StatefulWidget {
+  const WelcomeLoginScreen({super.key});
+
+  @override
+  State<WelcomeLoginScreen> createState() => _WelcomeLoginScreenState();
+}
+
+class _WelcomeLoginScreenState extends State<WelcomeLoginScreen> {
+  bool _loading = false;
+
+  Future<void> _continueLocalFirst() async {
+    setState(() => _loading = true);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('mio_welcome_complete', true);
+    if (!mounted) return;
+    context.go('/chat');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: MioTheme.cream,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1120),
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 760;
+                  final heroCard = Container(
+                      padding: const EdgeInsets.all(34),
+                      decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(34), border: Border.all(color: MioTheme.line), boxShadow: [BoxShadow(color: Colors.black.withOpacity(.06), blurRadius: 34, offset: const Offset(0, 18))]),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const BrandMark(size: 92),
+                          const SizedBox(height: 24),
+                          Text('Mio', style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -1.2)),
+                          const SizedBox(height: 10),
+                          Text('Think. Not yap.', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: MioTheme.orange, fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 18),
+                          Text('Use your own AI keys across providers. Keep control of cost, privacy, and speed from the first launch.', style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: MioTheme.muted, height: 1.55)),
+                          const SizedBox(height: 30),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(backgroundColor: MioTheme.ink, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 17), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
+                              onPressed: _loading ? null : _continueLocalFirst,
+                              child: Text(_loading ? 'Opening Mio...' : 'Continue local-first', style: const TextStyle(fontWeight: FontWeight.w800)),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(foregroundColor: MioTheme.ink, side: const BorderSide(color: MioTheme.line), padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
+                              onPressed: _loading ? null : () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Supabase auth is ready to wire when credentials are provided.'))),
+                              icon: const Icon(Icons.lock_outline_rounded),
+                              label: const Text('Sign in / sync later', style: TextStyle(fontWeight: FontWeight.w800)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  final detailCard = Container(
+                      padding: const EdgeInsets.all(30),
+                      decoration: BoxDecoration(color: MioTheme.cream2, borderRadius: BorderRadius.circular(34), border: Border.all(color: MioTheme.line)),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          _WelcomePoint(icon: Icons.vpn_key_rounded, title: 'BYOK', text: 'Your keys stay encrypted on your device unless you enable E2EE sync.'),
+                          _WelcomePoint(icon: Icons.flash_on_rounded, title: 'Zero fluff', text: 'Mio defaults to direct answers, not greetings and filler.'),
+                          _WelcomePoint(icon: Icons.sync_lock_rounded, title: 'Sync-ready', text: 'Supabase can sync encrypted history and metadata when connected.'),
+                        ],
+                      ),
+                    );
+                  if (isCompact) {
+                    return SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          heroCard,
+                          const SizedBox(height: 18),
+                          detailCard,
+                        ],
+                      ),
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: heroCard),
+                      const SizedBox(width: 28),
+                      Expanded(child: detailCard),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WelcomePoint extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String text;
+  const _WelcomePoint({required this.icon, required this.title, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 22),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(width: 42, height: 42, decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(14), border: Border.all(color: MioTheme.line)), child: Icon(icon, color: MioTheme.orange)),
+          const SizedBox(width: 14),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)), const SizedBox(height: 4), Text(text, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: MioTheme.muted, height: 1.45))])),
+        ],
+      ),
+    );
+  }
 }
 
 class MioTheme {
@@ -668,10 +913,10 @@ class BrandHeader extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(color: MioTheme.ink, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(.12), blurRadius: 18, offset: const Offset(0, 8))]),
-          child: const Center(child: Text('M', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18))),
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: MioTheme.line), boxShadow: [BoxShadow(color: Colors.black.withOpacity(.08), blurRadius: 18, offset: const Offset(0, 8))]),
+          child: const Center(child: BrandMark(size: 34)),
         ),
         const SizedBox(width: 12),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
