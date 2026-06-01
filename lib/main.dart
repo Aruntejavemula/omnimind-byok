@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
@@ -17,6 +18,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
@@ -365,6 +367,7 @@ class _WelcomePoint extends StatelessWidget {
 }
 
 
+
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -381,21 +384,41 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
   final _apiKeyController = TextEditingController();
   final _storage = const FlutterSecureStorage();
 
-  late final AnimationController _entryController;
+  late final AnimationController _pageEntranceController;
   late final AnimationController _celebrationController;
+  late final AnimationController _shimmerController;
+  late final AnimationController _floatController;
 
   int _currentPage = 0;
-  String _selectedProviderId = 'openrouter';
-  String? _nameError;
-  String? _selectedPlan = 'free';
+  bool _ready = false;
   bool _isKeyVisible = false;
-  final Set<String> _preferences = {};
+  bool _isAnnualOnboarding = false;
+  String _selectedProvider = 'OpenRouter';
+  String? _nameError;
+  String? _keyError;
+  String? _selectedPlan;
+  final Set<String> _selectedPreferences = {};
 
   @override
   void initState() {
     super.initState();
-    _entryController = AnimationController(vsync: this, duration: const Duration(milliseconds: 520))..forward();
-    _celebrationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
+    _pageEntranceController = AnimationController(vsync: this, duration: const Duration(milliseconds: 700))..forward();
+    _celebrationController = AnimationController(vsync: this, duration: const Duration(seconds: 4));
+    _shimmerController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+    _floatController = AnimationController(vsync: this, duration: const Duration(milliseconds: 3000))..repeat(reverse: true);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_ready) _precacheBackground();
+  }
+
+  Future<void> _precacheBackground() async {
+    try {
+      await precacheImage(const AssetImage('assets/images/sky_clouds.png'), context);
+    } catch (_) {}
+    if (mounted) setState(() => _ready = true);
   }
 
   @override
@@ -404,19 +427,83 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
     _firstNameController.dispose();
     _lastNameController.dispose();
     _apiKeyController.dispose();
-    _entryController.dispose();
+    _pageEntranceController.dispose();
     _celebrationController.dispose();
+    _shimmerController.dispose();
+    _floatController.dispose();
     super.dispose();
   }
 
+  String get _firstName => _firstNameController.text.trim();
+
+  Color _cardBg(bool isDark) => isDark ? const Color(0xFF141414) : Colors.white;
+  Color _cardBorder(bool isDark) => isDark ? Colors.white.withOpacity(.08) : Colors.white.withOpacity(.6);
+  Color _sub(bool isDark) => isDark ? const Color(0xFFB8B8B8) : const Color(0xFF6B7280);
+  Color _txt(bool isDark) => isDark ? const Color(0xFFF7F7F7) : MioTheme.ink;
+  Color _inBg(bool isDark) => isDark ? const Color(0xFF242424) : const Color(0xFFF9FAFB);
+  Color _inBorder(bool isDark) => isDark ? const Color(0xFF3A3A3A) : const Color(0xFFE5E7EB);
+
+  BoxDecoration _glass(bool isDark) => BoxDecoration(
+        color: _cardBg(isDark).withOpacity(isDark ? .88 : .82),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: _cardBorder(isDark)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(isDark ? .4 : .08), blurRadius: 30, offset: const Offset(0, 10)),
+          if (!isDark) BoxShadow(color: Colors.white.withOpacity(.5), blurRadius: 0, offset: const Offset(0, -1)),
+        ],
+      );
+
+  Widget _glassPanel({required bool isDark, required Widget child, EdgeInsets padding = const EdgeInsets.all(24), double maxWidth = 420}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(constraints: BoxConstraints(maxWidth: maxWidth), padding: padding, decoration: _glass(isDark), child: child),
+      ),
+    );
+  }
+
+  Widget _animatedContent({required Widget child, double extraDelay = 0}) {
+    final fade = CurvedAnimation(parent: _pageEntranceController, curve: Interval(extraDelay, (0.6 + extraDelay).clamp(0.0, 1.0).toDouble(), curve: Curves.easeOut));
+    final slide = CurvedAnimation(parent: _pageEntranceController, curve: Interval(extraDelay, (0.7 + extraDelay).clamp(0.0, 1.0).toDouble(), curve: Curves.easeOutCubic));
+    return AnimatedBuilder(
+      animation: _pageEntranceController,
+      builder: (context, _) => Opacity(
+        opacity: fade.value,
+        child: Transform.translate(offset: Offset(0, 28 * (1 - slide.value)), child: Transform.scale(scale: 0.96 + 0.04 * slide.value, child: child)),
+      ),
+    );
+  }
+
+  Widget _stepLabel(String text, bool isDark) {
+    return _animatedContent(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.12), borderRadius: BorderRadius.circular(20)),
+        child: Text(text, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: MioTheme.orange)),
+      ),
+    );
+  }
+
+  void _goToPage(int page) {
+    _pageController.animateToPage(page, duration: const Duration(milliseconds: 550), curve: Curves.easeInOutCubic);
+    setState(() => _currentPage = page);
+    _pageEntranceController
+      ..reset()
+      ..forward();
+    if (page == _totalPages - 1) _celebrationController.forward(from: 0);
+  }
+
   Future<void> _nextPage() async {
-    if (_currentPage == 0 && _firstNameController.text.trim().isEmpty) {
-      setState(() => _nameError = 'Please enter your first name to continue.');
-      return;
+    if (_currentPage == 0) {
+      if (_firstNameController.text.trim().isEmpty) {
+        setState(() => _nameError = 'Please enter your name to continue');
+        return;
+      }
+      await _saveName();
     }
-    if (_currentPage == 0) await _saveName();
     if (_currentPage == 4) await _savePreferences();
-    if (_currentPage == 5) await _savePendingKey();
+    if (_currentPage == 5 && _apiKeyController.text.trim().isNotEmpty) await _saveApiKey();
     if (_currentPage < _totalPages - 1) {
       _goToPage(_currentPage + 1);
     } else {
@@ -424,13 +511,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
     }
   }
 
-  void _goToPage(int page) {
-    _pageController.animateToPage(page, duration: const Duration(milliseconds: 420), curve: Curves.easeOutCubic);
-    setState(() => _currentPage = page);
-    _entryController
-      ..reset()
-      ..forward();
-    if (page == _totalPages - 1) _celebrationController.forward(from: 0);
+  void _skipToReady() => _goToPage(_totalPages - 1);
+
+  Future<void> _savePreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('mio_onboarding_preferences', _selectedPreferences.toList());
+    await prefs.setString('user_preferences', _selectedPreferences.join(','));
   }
 
   Future<void> _saveName() async {
@@ -439,420 +525,621 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
     await prefs.setString('user_last_name', _lastNameController.text.trim());
   }
 
-  Future<void> _savePreferences() async {
+  Future<void> _saveApiKey() async {
+    final id = _providerIdFromName(_selectedProvider);
+    await _storage.write(key: 'provider_key_$id', value: _apiKeyController.text.trim());
+    await _storage.write(key: 'pending_api_key', value: _apiKeyController.text.trim());
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('mio_onboarding_preferences', _preferences.toList());
-  }
-
-  Future<void> _savePendingKey() async {
-    final key = _apiKeyController.text.trim();
-    if (key.isNotEmpty) {
-      await _storage.write(key: 'provider_key_$_selectedProviderId', value: key);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('provider', _selectedProviderId);
-    }
+    await prefs.setString('provider', id);
   }
 
   Future<void> _completeOnboarding() async {
+    await _storage.write(key: 'onboarding_complete', value: 'true');
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('mio_onboarding_complete', true);
     await prefs.setString('mio_onboarding_plan', _selectedPlan ?? 'free');
-    if (!mounted) return;
-    context.go('/chat');
+    if (mounted) context.go('/chat');
   }
 
-  String get _firstName => _firstNameController.text.trim();
+  String _providerIdFromName(String name) {
+    final normalized = name.toLowerCase().replaceAll(' ', '');
+    return providers.firstWhere((p) => p.name.toLowerCase().replaceAll(' ', '') == normalized, orElse: () => providers.firstWhere((p) => p.id == 'openrouter')).id;
+  }
+
+  String _getReadyText() {
+    final greeting = _firstName.isNotEmpty ? "You're all set, $_firstName!" : "You're all set!";
+    if (_selectedPreferences.contains('Coding')) return '$greeting\nLet’s code.';
+    if (_selectedPreferences.contains('Writing')) return '$greeting\nLet’s write.';
+    if (_selectedPreferences.length > 1) return '$greeting\nLet’s create.';
+    return '$greeting\nLet’s go.';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (!_ready) return Scaffold(backgroundColor: isDark ? const Color(0xFF0B0B0A) : const Color(0xFFB8E4F9));
+
     return Scaffold(
-      backgroundColor: MioTheme.cream,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: CustomPaint(painter: _OnboardingBackgroundPainter()),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _floatController,
+              builder: (context, child) => Transform.translate(offset: Offset(0, -4 + 8 * _floatController.value), child: child),
+              child: Image.asset('assets/images/sky_clouds.png', fit: BoxFit.cover),
             ),
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 980),
-                child: Padding(
-                  padding: const EdgeInsets.all(22),
-                  child: Column(
+          ),
+          if (isDark) Positioned.fill(child: Container(color: Colors.black.withOpacity(.55))),
+          SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  child: Stack(
                     children: [
-                      _buildTopBar(),
-                      Expanded(
-                        child: PageView(
-                          controller: _pageController,
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: [
-                            _pageName(),
-                            _pageProblem(),
-                            _pageSolution(),
-                            _pageByok(),
-                            _pagePreferences(),
-                            _pageAddKey(),
-                            _pagePricing(),
-                            _pageReady(),
-                          ],
-                        ),
+                      PageView(
+                        controller: _pageController,
+                        physics: const NeverScrollableScrollPhysics(),
+                        children: [_buildPageName(isDark), _buildPageProblem(isDark), _buildPageSolution(isDark), _buildPageBYOK(isDark), _buildPagePreferences(isDark), _buildPageAddKey(isDark), _buildPagePricing(isDark), _buildPageReady(isDark)],
                       ),
-                      _buildBottomBar(),
+                      if (_currentPage > 0 && _currentPage <= 5)
+                        Positioned(
+                          top: 12,
+                          right: 16,
+                          child: _animatedContent(
+                            extraDelay: .3,
+                            child: TextButton(
+                              onPressed: _skipToReady,
+                              style: TextButton.styleFrom(backgroundColor: _cardBg(isDark).withOpacity(.85), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+                              child: Text('Skip', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w500, color: _sub(isDark))),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
+                if (_currentPage > 0) _buildBottomArea(isDark),
+              ],
+            ),
+          ),
+          if (_currentPage == _totalPages - 1)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedBuilder(animation: _celebrationController, builder: (context, _) => CustomPaint(painter: _ConfettiPainter(progress: _celebrationController.value))),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar() {
-    return Row(
-      children: [
-        const BrandMark(size: 42),
-        const SizedBox(width: 12),
-        Text('Mio setup', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-        const Spacer(),
-        if (_currentPage > 0 && _currentPage < 7)
-          TextButton(onPressed: () => _goToPage(7), child: const Text('Skip to ready')),
-      ],
-    );
-  }
-
-  Widget _buildBottomBar() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(_totalPages, (i) {
-              final active = i == _currentPage;
-              final done = i < _currentPage;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                width: active ? 30 : 9,
-                height: 9,
-                decoration: BoxDecoration(
-                  color: active || done ? MioTheme.orange : MioTheme.line,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              if (_currentPage > 0)
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _goToPage(_currentPage - 1),
-                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                    child: const Text('Back'),
-                  ),
-                ),
-              if (_currentPage > 0) const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: FilledButton(
-                  onPressed: _nextPage,
-                  style: FilledButton.styleFrom(backgroundColor: MioTheme.orange, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                  child: Text(_currentPage == _totalPages - 1 ? 'Enter Mio' : 'Continue', style: const TextStyle(fontWeight: FontWeight.w900)),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
 
-  Widget _shell({required String label, required String title, required String subtitle, required Widget child}) {
-    return FadeTransition(
-      opacity: CurvedAnimation(parent: _entryController, curve: Curves.easeOut),
-      child: Center(
-        child: SingleChildScrollView(
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 18),
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: MioTheme.panel.withOpacity(.94),
-              borderRadius: BorderRadius.circular(32),
-              border: Border.all(color: MioTheme.line),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(.06), blurRadius: 30, offset: const Offset(0, 18))],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _stepLabel(label),
-                const SizedBox(height: 18),
-                Text(title, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -.8, height: 1.05)),
-                const SizedBox(height: 12),
-                Text(subtitle, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: MioTheme.muted, height: 1.5)),
-                const SizedBox(height: 24),
-                child,
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _stepLabel(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.12), borderRadius: BorderRadius.circular(999)),
-      child: Text(text, style: const TextStyle(color: MioTheme.orange, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: .5)),
-    );
-  }
-
-  Widget _pageName() => _shell(
-        label: 'START',
-        title: 'What should Mio call you?',
-        subtitle: 'Personalize the workspace without making setup heavy.',
+  Widget _buildBottomArea(bool isDark) {
+    return _animatedContent(
+      extraDelay: .2,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
-              children: [
-                Expanded(child: _field(_firstNameController, 'First name', Icons.person_outline_rounded, errorText: _nameError, onChanged: (_) => setState(() => _nameError = null))),
-                const SizedBox(width: 12),
-                Expanded(child: _field(_lastNameController, 'Last name', Icons.badge_outlined)),
-              ],
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(_totalPages, (i) {
+                final isActive = i == _currentPage;
+                final isDone = i < _currentPage;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                    width: isActive ? 28 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: isActive ? MioTheme.orange : isDone ? MioTheme.orange.withOpacity(.45) : Colors.white.withOpacity(isDark ? .15 : .5)),
+                  ),
+                );
+              }),
             ),
+            const SizedBox(height: 16),
+            if (_currentPage != 6)
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 380),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: _currentPage == _totalPages - 1
+                      ? _ShimmerButton(controller: _shimmerController, onPressed: _nextPage, label: 'Let’s go →')
+                      : ElevatedButton(
+                          onPressed: _nextPage,
+                          style: ElevatedButton.styleFrom(backgroundColor: MioTheme.orange, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
+                          child: Text('Continue', style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700)),
+                        ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            if (_currentPage > 0)
+              TextButton(
+                onPressed: () => _goToPage(_currentPage - 1),
+                style: TextButton.styleFrom(backgroundColor: _cardBg(isDark).withOpacity(.6), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                child: Text('← Back', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w500, color: _txt(isDark))),
+              ),
           ],
         ),
-      );
-
-  Widget _pageProblem() => _shell(
-        label: 'THE PROBLEM',
-        title: 'Most AI apps talk too much and hide the cost.',
-        subtitle: 'You should not fight bloated prompts, surprise usage, or locked-in providers just to get direct work done.',
-        child: Column(children: const [
-          _OnboardingPoint(icon: Icons.chat_bubble_outline_rounded, title: 'Too much filler', text: 'Generic assistants waste time with greetings and padded answers.'),
-          _OnboardingPoint(icon: Icons.lock_outline_rounded, title: 'Provider lock-in', text: 'One backend decides your models, pricing, and limits.'),
-          _OnboardingPoint(icon: Icons.receipt_long_rounded, title: 'Unclear spending', text: 'Subscriptions often hide what each model call actually costs.'),
-        ]),
-      );
-
-  Widget _pageSolution() => _shell(
-        label: 'THE SOLUTION',
-        title: 'Mio is a direct, local-first AI workspace.',
-        subtitle: 'It is built around fast answers, transparent provider choice, and a clean workspace that gets out of your way.',
-        child: Wrap(spacing: 12, runSpacing: 12, children: const [
-          _FeatureChip(icon: Icons.flash_on_rounded, label: 'Zero fluff'),
-          _FeatureChip(icon: Icons.folder_copy_outlined, label: 'Projects'),
-          _FeatureChip(icon: Icons.attach_file_rounded, label: 'Attachments'),
-          _FeatureChip(icon: Icons.travel_explore_rounded, label: 'Web research'),
-          _FeatureChip(icon: Icons.sync_lock_rounded, label: 'Optional sync'),
-        ]),
-      );
-
-  Widget _pageByok() => _shell(
-        label: 'BYOK',
-        title: 'Bring your own key. Keep control.',
-        subtitle: 'Use OpenAI, Anthropic, Gemini, OpenRouter, local models, or another compatible provider. Your provider keys stay in secure device storage.',
-        child: Column(children: [
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: providers.take(9).map((p) => Chip(label: Text(p.name), avatar: const Icon(Icons.auto_awesome_rounded, size: 16), side: const BorderSide(color: MioTheme.line), backgroundColor: MioTheme.cream2)).toList(),
-          ),
-          const SizedBox(height: 16),
-          const _OnboardingNotice(icon: Icons.privacy_tip_outlined, text: 'Mio should never log, sync, or expose provider keys unless the user explicitly enables encrypted sync.'),
-        ]),
-      );
-
-  Widget _pagePreferences() {
-    final items = ['Coding', 'Writing', 'Learning', 'Work', 'Creative', 'Research', 'Chat', 'Math'];
-    return _shell(
-      label: 'PERSONALIZE',
-      title: 'What will you use AI for?',
-      subtitle: 'Pick a few focus areas so Mio can shape the default workspace around your habits.',
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: items.map((item) {
-          final selected = _preferences.contains(item);
-          return FilterChip(
-            selected: selected,
-            label: Text(item, style: TextStyle(fontWeight: selected ? FontWeight.w900 : FontWeight.w700)),
-            selectedColor: MioTheme.orange.withOpacity(.16),
-            checkmarkColor: MioTheme.orange,
-            backgroundColor: MioTheme.cream2,
-            side: BorderSide(color: selected ? MioTheme.orange : MioTheme.line),
-            onSelected: (_) => setState(() => selected ? _preferences.remove(item) : _preferences.add(item)),
-          );
-        }).toList(),
       ),
     );
   }
 
-  Widget _pageAddKey() => _shell(
-        label: 'CONNECT',
-        title: 'Add an API key now, or do it later.',
-        subtitle: 'This step is optional. If you paste a key, Mio saves it only to secure device storage for the selected provider.',
+  Widget _buildPageName(bool isDark) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            DropdownButtonFormField<String>(
-              value: _selectedProviderId,
-              decoration: _inputDecoration('Provider', Icons.hub_outlined),
-              items: providers.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))).toList(),
-              onChanged: (value) => setState(() => _selectedProviderId = value ?? _selectedProviderId),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _apiKeyController,
-              obscureText: !_isKeyVisible,
-              decoration: _inputDecoration('API key optional', Icons.key_rounded).copyWith(
-                suffixIcon: IconButton(icon: Icon(_isKeyVisible ? Icons.visibility_off : Icons.visibility), onPressed: () => setState(() => _isKeyVisible = !_isKeyVisible)),
+            _animatedContent(
+              child: AnimatedBuilder(
+                animation: _floatController,
+                builder: (context, child) => Transform.translate(offset: Offset(0, -3 + 6 * _floatController.value), child: child),
+                child: Container(decoration: BoxDecoration(shape: BoxShape.circle, boxShadow: [BoxShadow(color: MioTheme.orange.withOpacity(.15), blurRadius: 30, spreadRadius: 4)]), child: const BrandMark(size: 72)),
               ),
             ),
-            const SizedBox(height: 14),
-            const _OnboardingNotice(icon: Icons.info_outline_rounded, text: 'You can skip this and add keys later from settings. Local-first users keep keys on this device only.'),
+            const SizedBox(height: 20),
+            _animatedContent(
+              extraDelay: .1,
+              child: _glassPanel(
+                isDark: isDark,
+                maxWidth: 380,
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  children: [
+                    Text(_firstName.isNotEmpty ? 'Hey, $_firstName 👋' : 'Welcome 👋', style: GoogleFonts.dmSerifDisplay(fontSize: 28, fontWeight: FontWeight.bold, color: _txt(isDark)), textAlign: TextAlign.center),
+                    const SizedBox(height: 8),
+                    Text('Let’s set up your AI in 60 seconds', style: GoogleFonts.dmSans(fontSize: 14, color: _sub(isDark)), textAlign: TextAlign.center),
+                    const SizedBox(height: 24),
+                    _onboardingField(controller: _firstNameController, hint: 'First name', isDark: isDark, action: TextInputAction.next, onChanged: () { if (_nameError != null) setState(() => _nameError = null); setState(() {}); }),
+                    const SizedBox(height: 12),
+                    _onboardingField(controller: _lastNameController, hint: 'Last name (optional)', isDark: isDark, action: TextInputAction.done, onSubmit: _nextPage),
+                    if (_nameError != null) ...[const SizedBox(height: 8), Text(_nameError!, style: GoogleFonts.dmSans(fontSize: 12, color: Colors.red))],
+                    const SizedBox(height: 20),
+                    SizedBox(width: double.infinity, height: 50, child: ElevatedButton(onPressed: _nextPage, style: ElevatedButton.styleFrom(backgroundColor: MioTheme.orange, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), elevation: 0), child: Text('Get started', style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700)))),
+                  ],
+                ),
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _onboardingField({required TextEditingController controller, required String hint, required bool isDark, TextInputAction action = TextInputAction.next, Future<void> Function()? onSubmit, VoidCallback? onChanged}) {
+    return TextField(
+      controller: controller,
+      textInputAction: action,
+      onSubmitted: (_) => onSubmit?.call(),
+      onChanged: (_) => onChanged?.call(),
+      style: GoogleFonts.dmSans(fontSize: 15, color: _txt(isDark)),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: GoogleFonts.dmSans(fontSize: 15, color: isDark ? const Color(0xFF777777) : const Color(0xFF9CA3AF)),
+        filled: true,
+        fillColor: _inBg(isDark),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: _inBorder(isDark))),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: _inBorder(isDark))),
+        focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14)), borderSide: BorderSide(color: MioTheme.orange, width: 1.5)),
+      ),
+    );
+  }
+
+  Widget _buildPageProblem(bool isDark) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          children: [
+            _stepLabel('THE PROBLEM', isDark),
+            const SizedBox(height: 16),
+            _animatedContent(
+              extraDelay: .05,
+              child: _glassPanel(
+                isDark: isDark,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(child: Text('Other AIs be like...', style: GoogleFonts.dmSerifDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: _txt(isDark)))),
+                    const SizedBox(height: 20),
+                    _chatBubble("What's the capital of France?", isUser: true, isDark: isDark),
+                    const SizedBox(height: 12),
+                    _chatBubble("Great question! I'd be happy to help you with that! So, the capital of France is a fascinating topic. France, officially known as the French Republic, is a country located in Western Europe. Its capital city, which has been the center of French culture, politics, and economics for centuries, is Paris. I hope that helps! 😊", isUser: false, isDark: isDark),
+                    const SizedBox(height: 16),
+                    _chatBubble("Also, I should note that real work needs realism: cost visibility, model choice, local privacy, and fewer vague promises.", isUser: false, isDark: isDark),
+                    const SizedBox(height: 20),
+                    Center(child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), decoration: BoxDecoration(color: Colors.red.withOpacity(.08), borderRadius: BorderRadius.circular(20)), child: Text('😴 You fell asleep reading that.', style: GoogleFonts.dmSans(fontSize: 14, fontStyle: FontStyle.italic, color: _sub(isDark))))),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chatBubble(String text, {required bool isUser, required bool isDark}) {
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(maxWidth: isUser ? 260 : 300),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(color: isUser ? MioTheme.orange : (isDark ? const Color(0xFF232323) : const Color(0xFFF3F4F6)), borderRadius: BorderRadius.circular(18)),
+        child: Text(text, style: GoogleFonts.dmSans(fontSize: 13, color: isUser ? Colors.white : _txt(isDark), height: 1.45)),
+      ),
+    );
+  }
+
+  Widget _buildPageSolution(bool isDark) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          children: [
+            _stepLabel('THE SOLUTION', isDark),
+            const SizedBox(height: 16),
+            _animatedContent(
+              extraDelay: .05,
+              child: _glassPanel(
+                isDark: isDark,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Center(child: Row(mainAxisSize: MainAxisSize.min, children: [const BrandMark(size: 28, animate: false), const SizedBox(width: 8), Text('Mio be like...', style: GoogleFonts.dmSerifDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: _txt(isDark)))])),
+                  const SizedBox(height: 20),
+                  _chatBubble("What's the capital of France?", isUser: true, isDark: isDark),
+                  const SizedBox(height: 12),
+                  _chatBubble('Paris.', isUser: false, isDark: isDark),
+                  const SizedBox(height: 20),
+                  Center(child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), decoration: BoxDecoration(color: Colors.green.withOpacity(.08), borderRadius: BorderRadius.circular(20)), child: Text('⚡ Direct. Fast. No yapping.', style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: MioTheme.orange)))),
+                  const SizedBox(height: 20),
+                  ...['Your keys, your models', 'Switch providers anytime', 'No markup on tokens', 'Run local with Ollama'].asMap().entries.map((e) => _featureRow('${e.key + 1}', e.value, isDark)),
+                  const SizedBox(height: 16),
+                  Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: ['No filler', 'Straight answers', 'Your keys'].map((l) => _pill(l, isDark)).toList()),
+                ]),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pill(String label, bool isDark) => Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(borderRadius: BorderRadius.circular(999), border: Border.all(color: _inBorder(isDark)), color: isDark ? const Color(0xFF232323) : null), child: Text(label, style: GoogleFonts.dmSans(fontSize: 12, color: _sub(isDark))));
+
+  Widget _featureRow(String number, String text, bool isDark) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(children: [Container(width: 26, height: 26, decoration: BoxDecoration(gradient: LinearGradient(colors: [MioTheme.orange.withOpacity(.15), MioTheme.orange.withOpacity(.05)]), shape: BoxShape.circle), child: Center(child: Text(number, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w800, color: MioTheme.orange)))), const SizedBox(width: 12), Text(text, style: GoogleFonts.dmSans(fontSize: 14, color: _txt(isDark)))]),
+      );
+
+  Widget _buildPageBYOK(bool isDark) {
+    final displayProviders = <Map<String, String>>[
+      {'name': 'OpenAI', 'asset': 'assets/icons/providers/openai.png'},
+      {'name': 'Anthropic', 'asset': 'assets/icons/providers/anthropic.png'},
+      {'name': 'DeepSeek', 'asset': 'assets/icons/providers/deepseek.png'},
+      {'name': 'Gemini', 'asset': 'assets/icons/providers/google.png'},
+      {'name': 'Mistral', 'asset': 'assets/icons/providers/mistral.png'},
+      {'name': 'OpenRouter', 'asset': 'assets/icons/providers/openrouter.png'},
+      {'name': 'Kimi', 'asset': 'assets/icons/providers/kimi.png'},
+    ];
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(children: [
+          _stepLabel('YOUR KEYS', isDark),
+          const SizedBox(height: 16),
+          _animatedContent(
+            extraDelay: .05,
+            child: _glassPanel(
+              isDark: isDark,
+              child: Column(children: [
+                Text('Your AI. Your keys.', style: GoogleFonts.dmSerifDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: _txt(isDark)), textAlign: TextAlign.center),
+                const SizedBox(height: 6),
+                Text('Bring your own API keys — zero markup.', style: GoogleFonts.dmSans(fontSize: 13, color: _sub(isDark)), textAlign: TextAlign.center),
+                const SizedBox(height: 24),
+                Wrap(spacing: 14, runSpacing: 16, alignment: WrapAlignment.center, children: [...displayProviders.asMap().entries.map((e) => _providerChip(e.value, isDark, e.key)), _moreChip(isDark)]),
+                const SizedBox(height: 24),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: _inBg(isDark), borderRadius: BorderRadius.circular(16), border: Border.all(color: _inBorder(isDark))),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [const Icon(Icons.verified_rounded, size: 16, color: MioTheme.orange), const SizedBox(width: 6), Text('Why BYOK?', style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: _txt(isDark)))]),
+                    const SizedBox(height: 10),
+                    ...['Access latest models instantly', 'No rate limits from us', 'Use local models (Ollama)', 'Switch providers anytime'].map((t) => _checkRow(t, true, isDark)),
+                    const SizedBox(height: 8),
+                    Divider(color: _inBorder(isDark)),
+                    const SizedBox(height: 4),
+                    Text('Locked platforms:', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: _sub(isDark))),
+                    const SizedBox(height: 6),
+                    ...['Stuck on old models', 'Heavy rate limits', 'Markup on every token'].map((t) => _checkRow(t, false, isDark)),
+                  ]),
+                ),
+              ]),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _providerChip(Map<String, String> p, bool isDark, int index) => _animatedContent(
+        extraDelay: .05 + index * .03,
+        child: SizedBox(
+          width: 68,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 48, height: 48, decoration: BoxDecoration(color: isDark ? const Color(0xFF232323) : Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? .25 : .1), blurRadius: 8, offset: const Offset(0, 3))]), child: ClipOval(child: Padding(padding: const EdgeInsets.all(9), child: Image.asset(p['asset']!, fit: BoxFit.contain, errorBuilder: (_, __, ___) => Center(child: Text(p['name']![0], style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.bold, color: MioTheme.orange))))))),
+            const SizedBox(height: 5),
+            Text(p['name']!, style: GoogleFonts.dmSans(fontSize: 10, color: _sub(isDark)), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ]),
         ),
       );
 
-  Widget _pagePricing() => _shell(
-        label: 'PLAN',
-        title: 'Choose how you want to start.',
-        subtitle: 'For now, keep Mio honest: local-first and BYOK are available first. Pro can be wired later when billing is ready.',
-        child: Column(children: [
-          _PlanTile(title: 'Free / Local-first', subtitle: 'Use Mio on this device with your own keys. No cross-device sync until sign-in and Supabase are configured.', selected: _selectedPlan == 'free', onTap: () => setState(() => _selectedPlan = 'free')),
-          const SizedBox(height: 12),
-          _PlanTile(title: 'Pro later', subtitle: 'Placeholder for future sync, advanced connectors, and subscription features after billing is implemented.', selected: _selectedPlan == 'pro_later', onTap: () => setState(() => _selectedPlan = 'pro_later')),
-        ]),
-      );
+  Widget _moreChip(bool isDark) => SizedBox(width: 68, child: Column(mainAxisSize: MainAxisSize.min, children: [Container(width: 48, height: 48, decoration: BoxDecoration(color: isDark ? const Color(0xFF292929) : const Color(0xFFF3F4F6), shape: BoxShape.circle, border: Border.all(color: _inBorder(isDark))), child: Icon(Icons.more_horiz, color: _sub(isDark), size: 22)), const SizedBox(height: 5), Text('& more', style: GoogleFonts.dmSans(fontSize: 10, color: _sub(isDark)), textAlign: TextAlign.center)]));
 
-  Widget _pageReady() => _shell(
-        label: 'READY',
-        title: _firstName.isEmpty ? 'Mio is ready.' : 'Mio is ready, $_firstName.',
-        subtitle: 'Your workspace is set. Ask directly, switch providers when needed, and keep control of your keys.',
-        child: Center(
+  Widget _checkRow(String text, bool positive, bool isDark) => Padding(padding: const EdgeInsets.only(bottom: 5), child: Row(children: [Icon(positive ? Icons.check_circle_rounded : Icons.cancel_rounded, size: 15, color: positive ? Colors.green : Colors.red), const SizedBox(width: 8), Expanded(child: Text(text, style: GoogleFonts.dmSans(fontSize: 12, color: positive ? _txt(isDark) : _sub(isDark))))]));
+
+  Widget _buildPagePreferences(bool isDark) {
+    const items = [
+      {'label': 'Coding', 'emoji': '💻'}, {'label': 'Writing', 'emoji': '✏️'}, {'label': 'Learning', 'emoji': '📚'}, {'label': 'Work', 'emoji': '💼'},
+      {'label': 'Creative', 'emoji': '🎨'}, {'label': 'Research', 'emoji': '🔬'}, {'label': 'Chat', 'emoji': '💬'}, {'label': 'Math', 'emoji': '🧮'},
+    ];
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(children: [
+          _stepLabel('PERSONALIZE', isDark),
+          const SizedBox(height: 16),
+          _animatedContent(
+            extraDelay: .05,
+            child: _glassPanel(
+              isDark: isDark,
+              maxWidth: 380,
+              child: Column(children: [
+                Text('What do you use AI for?', style: GoogleFonts.dmSerifDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: _txt(isDark)), textAlign: TextAlign.center),
+                const SizedBox(height: 6),
+                Text('Pick your superpowers', style: GoogleFonts.dmSans(fontSize: 13, color: _sub(isDark))),
+                const SizedBox(height: 20),
+                GridView.count(
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 2.6,
+                  children: items.map((item) {
+                    final label = item['label']!;
+                    final isSelected = _selectedPreferences.contains(label);
+                    return GestureDetector(
+                      onTap: () => setState(() => isSelected ? _selectedPreferences.remove(label) : _selectedPreferences.add(label)),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOutCubic,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(color: isSelected ? MioTheme.orange.withOpacity(.1) : _inBg(isDark), borderRadius: BorderRadius.circular(14), border: Border.all(color: isSelected ? MioTheme.orange : _inBorder(isDark), width: isSelected ? 2 : 1), boxShadow: isSelected ? [BoxShadow(color: MioTheme.orange.withOpacity(.1), blurRadius: 8, offset: const Offset(0, 2))] : null),
+                        child: Row(children: [Text(item['emoji']!, style: const TextStyle(fontSize: 18)), const SizedBox(width: 8), Expanded(child: Text(label, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500, color: isSelected ? MioTheme.orange : _txt(isDark)))), if (isSelected) const Icon(Icons.check_circle, size: 16, color: MioTheme.orange)]),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                if (_selectedPreferences.isNotEmpty) ...[const SizedBox(height: 16), AnimatedContainer(duration: const Duration(milliseconds: 300), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8), decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.06), borderRadius: BorderRadius.circular(12)), child: Text('✨ ${_selectedPreferences.length} selected — we’ll tailor your experience', style: GoogleFonts.dmSans(fontSize: 12, color: MioTheme.orange, fontWeight: FontWeight.w600), textAlign: TextAlign.center))],
+              ]),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildPageAddKey(bool isDark) {
+    final providerOptions = <Map<String, String>>[
+      {'name': 'OpenRouter', 'asset': 'assets/icons/providers/openrouter.png'}, {'name': 'OpenAI', 'asset': 'assets/icons/providers/openai.png'}, {'name': 'Anthropic', 'asset': 'assets/icons/providers/anthropic.png'}, {'name': 'DeepSeek', 'asset': 'assets/icons/providers/deepseek.png'}, {'name': 'Gemini', 'asset': 'assets/icons/providers/google.png'}, {'name': 'Groq', 'asset': 'assets/icons/providers/groq.png'}, {'name': 'Mistral', 'asset': 'assets/icons/providers/mistral.png'}, {'name': 'Ollama', 'asset': 'assets/icons/providers/ollama.png'}, {'name': 'Kimi', 'asset': 'assets/icons/providers/kimi.png'},
+    ];
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(children: [
+          _stepLabel('CONNECT', isDark),
+          const SizedBox(height: 16),
+          _animatedContent(
+            extraDelay: .05,
+            child: _glassPanel(
+              isDark: isDark,
+              maxWidth: 400,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Center(child: Text('Add your API key', style: GoogleFonts.dmSerifDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: _txt(isDark)))),
+                const SizedBox(height: 4),
+                Center(child: Text('Choose a provider and paste your key', style: GoogleFonts.dmSans(fontSize: 13, color: _sub(isDark)))),
+                const SizedBox(height: 20),
+                Text('Provider', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: _txt(isDark))),
+                const SizedBox(height: 8),
+                Container(width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 14), decoration: BoxDecoration(color: _inBg(isDark), borderRadius: BorderRadius.circular(14), border: Border.all(color: _inBorder(isDark))), child: DropdownButtonHideUnderline(child: DropdownButton<String>(value: _selectedProvider, isExpanded: true, icon: Icon(Icons.keyboard_arrow_down, color: _sub(isDark)), dropdownColor: _cardBg(isDark), style: GoogleFonts.dmSans(fontSize: 14, color: _txt(isDark)), items: providerOptions.map((p) => DropdownMenuItem(value: p['name']!, child: Row(children: [ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.asset(p['asset']!, width: 20, height: 20, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox(width: 20, height: 20))), const SizedBox(width: 10), Text(p['name']!, style: GoogleFonts.dmSans(fontSize: 14, color: _txt(isDark)))]))).toList(), onChanged: (v) => setState(() { _selectedProvider = v!; _keyError = null; })))),
+                const SizedBox(height: 16),
+                if (_selectedProvider == 'OpenRouter') ...[
+                  Container(width: double.infinity, padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: isDark ? const Color(0xFF1A1030) : const Color(0xFFF0F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: isDark ? const Color(0xFF3D2A6E) : const Color(0xFFBAE6FD))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [const Icon(Icons.star_rounded, size: 16, color: Color(0xFF8B5CF6)), const SizedBox(width: 6), Text('Recommended for beginners', style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF8B5CF6)))]), const SizedBox(height: 6), Text('Free access to many models. Add \$10 for premium.', style: GoogleFonts.dmSans(fontSize: 12, color: _sub(isDark), height: 1.4)), const SizedBox(height: 10), SizedBox(width: double.infinity, height: 38, child: ElevatedButton(onPressed: () => launchUrl(Uri.parse('https://openrouter.ai/keys'), mode: LaunchMode.externalApplication), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 0), child: Text('Get OpenRouter Key →', style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700))))])),
+                  const SizedBox(height: 16),
+                ],
+                Text('API Key', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: _txt(isDark))),
+                const SizedBox(height: 6),
+                TextField(controller: _apiKeyController, obscureText: !_isKeyVisible, style: GoogleFonts.dmSans(fontSize: 14, color: _txt(isDark)), onChanged: (_) { if (_keyError != null) setState(() => _keyError = null); }, decoration: InputDecoration(hintText: 'Paste your $_selectedProvider API key', hintStyle: GoogleFonts.dmSans(fontSize: 13, color: isDark ? const Color(0xFF777777) : const Color(0xFF9CA3AF)), filled: true, fillColor: _inBg(isDark), contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: _keyError != null ? Colors.red : _inBorder(isDark))), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: _keyError != null ? Colors.red : _inBorder(isDark))), focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14)), borderSide: BorderSide(color: MioTheme.orange, width: 1.5)), suffixIcon: IconButton(onPressed: () => setState(() => _isKeyVisible = !_isKeyVisible), icon: Icon(_isKeyVisible ? Icons.visibility_off : Icons.visibility, color: _sub(isDark), size: 20)))),
+                if (_keyError != null) ...[const SizedBox(height: 6), Text(_keyError!, style: GoogleFonts.dmSans(fontSize: 12, color: Colors.red))],
+                const SizedBox(height: 14),
+                GestureDetector(onTap: () => _showOllamaSheet(context), child: Row(children: [Icon(Icons.computer, size: 14, color: _sub(isDark)), const SizedBox(width: 6), Text('Or run locally with Ollama', style: GoogleFonts.dmSans(fontSize: 12, color: MioTheme.orange))])),
+              ]),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  void _showOllamaSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: MioTheme.panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ScaleTransition(scale: Tween<double>(begin: .92, end: 1.0).animate(CurvedAnimation(parent: _celebrationController, curve: Curves.elasticOut)), child: const BrandMark(size: 118)),
-              const SizedBox(height: 18),
-              Text('No yapping. Just useful answers.', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: MioTheme.orange)),
+              Text(
+                'Run locally with Ollama',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Install Ollama, run a model like `ollama run llama3.1`, then choose Ollama from the model picker. Mio will use the local OpenAI-compatible endpoint.',
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => launchUrl(
+                  Uri.parse('https://ollama.com/'),
+                  mode: LaunchMode.externalApplication,
+                ),
+                child: const Text('Open Ollama'),
+              ),
             ],
           ),
         ),
-      );
-
-  Widget _field(TextEditingController controller, String label, IconData icon, {String? errorText, ValueChanged<String>? onChanged}) {
-    return TextField(controller: controller, onChanged: onChanged, decoration: _inputDecoration(label, icon).copyWith(errorText: errorText));
-  }
-
-  InputDecoration _inputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon),
-      filled: true,
-      fillColor: MioTheme.cream2.withOpacity(.68),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: MioTheme.line)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: MioTheme.line)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: MioTheme.orange, width: 1.4)),
-    );
-  }
-}
-
-class _OnboardingPoint extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String text;
-  const _OnboardingPoint({required this.icon, required this.title, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(width: 42, height: 42, decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.11), borderRadius: BorderRadius.circular(14)), child: Icon(icon, color: MioTheme.orange)),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.w900)), const SizedBox(height: 3), Text(text, style: const TextStyle(color: MioTheme.muted, height: 1.4))])),
-        ],
       ),
     );
   }
-}
 
-class _FeatureChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _FeatureChip({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-      decoration: BoxDecoration(color: MioTheme.cream2, borderRadius: BorderRadius.circular(999), border: Border.all(color: MioTheme.line)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, color: MioTheme.orange, size: 18), const SizedBox(width: 8), Text(label, style: const TextStyle(fontWeight: FontWeight.w800))]),
+  Widget _buildPagePricing(bool isDark) {
+    final proPrice = _isAnnualOnboarding ? '\$6.67/mo' : '\$8.00/mo';
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(children: [
+          _stepLabel('CHOOSE YOUR PLAN', isDark),
+          const SizedBox(height: 16),
+          _animatedContent(
+            extraDelay: .05,
+            child: _glassPanel(
+              isDark: isDark,
+              child: Column(children: [
+                Text('Unlock the full experience', style: GoogleFonts.dmSerifDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: _txt(isDark)), textAlign: TextAlign.center),
+                const SizedBox(height: 4),
+                Text('Cancel anytime. No questions asked.', style: GoogleFonts.dmSans(fontSize: 13, color: _sub(isDark))),
+                const SizedBox(height: 16),
+                _buildBillingToggle(isDark),
+                const SizedBox(height: 20),
+                _planCard(isDark: isDark, id: 'pro', title: 'PRO', price: proPrice, subtitle: '7-day free trial', features: ['100k tokens/day', '3 devices with sync', 'File uploads & voice input', 'iCloud & Google Drive', 'All AI providers'], featured: true),
+                const SizedBox(height: 12),
+                GestureDetector(onTap: () => setState(() => _selectedPlan = 'free'), child: AnimatedContainer(duration: const Duration(milliseconds: 250), width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14), decoration: BoxDecoration(color: _selectedPlan == 'free' ? _inBg(isDark) : Colors.transparent, borderRadius: BorderRadius.circular(14), border: Border.all(color: _selectedPlan == 'free' ? _txt(isDark).withOpacity(.3) : _inBorder(isDark), width: _selectedPlan == 'free' ? 1.5 : 1)), child: Row(children: [Text('Free', style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w600, color: _sub(isDark))), const SizedBox(width: 8), Expanded(child: Text('— BYOK, local-first, 1 device', style: GoogleFonts.dmSans(fontSize: 12, color: _sub(isDark)))), if (_selectedPlan == 'free') Icon(Icons.check_circle, size: 20, color: _txt(isDark).withOpacity(.5))]))),
+                if (_selectedPlan != null) ...[const SizedBox(height: 20), SizedBox(width: double.infinity, height: 54, child: _selectedPlan == 'pro' ? _ShimmerButton(controller: _shimmerController, onPressed: _completeOnboarding, label: 'Start 7-day free trial →') : ElevatedButton(onPressed: () => _goToPage(_totalPages - 1), style: ElevatedButton.styleFrom(backgroundColor: isDark ? Colors.white : MioTheme.ink, foregroundColor: isDark ? Colors.black : Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0), child: Text('Continue with Free', style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700))))],
+              ]),
+            ),
+          ),
+        ]),
+      ),
     );
   }
-}
 
-class _OnboardingNotice extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  const _OnboardingNotice({required this.icon, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.09), borderRadius: BorderRadius.circular(16), border: Border.all(color: MioTheme.orange.withOpacity(.22))),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, color: MioTheme.orange), const SizedBox(width: 10), Expanded(child: Text(text, style: const TextStyle(color: MioTheme.ink, height: 1.4, fontWeight: FontWeight.w600)))]),
-    );
-  }
-}
-
-class _PlanTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onTap;
-  const _PlanTile({required this.title, required this.subtitle, required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
+  Widget _planCard({required bool isDark, required String id, required String title, required String price, required String subtitle, required List<String> features, required bool featured}) {
+    final selected = _selectedPlan == id;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedPlan = id),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
         width: double.infinity,
         padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(color: selected ? MioTheme.orange.withOpacity(.12) : MioTheme.cream2, borderRadius: BorderRadius.circular(20), border: Border.all(color: selected ? MioTheme.orange : MioTheme.line, width: selected ? 1.6 : 1)),
-        child: Row(children: [Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off, color: selected ? MioTheme.orange : MioTheme.muted), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.w900)), const SizedBox(height: 4), Text(subtitle, style: const TextStyle(color: MioTheme.muted, height: 1.35))]))]),
+        decoration: BoxDecoration(gradient: selected ? LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [MioTheme.orange.withOpacity(.12), MioTheme.orange.withOpacity(.04)]) : null, color: selected ? null : _inBg(isDark), borderRadius: BorderRadius.circular(16), border: Border.all(color: selected ? MioTheme.orange : _inBorder(isDark), width: selected ? 2 : 1), boxShadow: selected ? [BoxShadow(color: MioTheme.orange.withOpacity(.15), blurRadius: 16, offset: const Offset(0, 4))] : null),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: MioTheme.orange, borderRadius: BorderRadius.circular(8)), child: Text(title, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1))), const SizedBox(width: 10), Text(price, style: GoogleFonts.dmSans(fontSize: 22, fontWeight: FontWeight.bold, color: _txt(isDark))), const Spacer(), Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: Colors.green.withOpacity(.1), borderRadius: BorderRadius.circular(6)), child: Text(subtitle, style: GoogleFonts.dmSans(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.green))), if (selected) ...[const SizedBox(width: 8), const Icon(Icons.check_circle, size: 22, color: MioTheme.orange)]]),
+          const SizedBox(height: 14),
+          ...features.map((f) => _proFeature(Icons.bolt_rounded, f, isDark)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _proFeature(IconData icon, String text, bool isDark) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Row(children: [Icon(icon, size: 16, color: MioTheme.orange), const SizedBox(width: 10), Expanded(child: Text(text, style: GoogleFonts.dmSans(fontSize: 13, color: _txt(isDark))))]));
+
+  Widget _buildBillingToggle(bool isDark) => Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Text('Monthly', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: !_isAnnualOnboarding ? _txt(isDark) : _sub(isDark))),
+        const SizedBox(width: 10),
+        GestureDetector(onTap: () => setState(() => _isAnnualOnboarding = !_isAnnualOnboarding), child: AnimatedContainer(duration: const Duration(milliseconds: 200), width: 48, height: 26, decoration: BoxDecoration(color: _isAnnualOnboarding ? MioTheme.orange : _inBorder(isDark), borderRadius: BorderRadius.circular(13)), padding: const EdgeInsets.all(2), child: AnimatedAlign(alignment: _isAnnualOnboarding ? Alignment.centerRight : Alignment.centerLeft, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic, child: Container(width: 22, height: 22, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle))))),
+        const SizedBox(width: 10),
+        Text('Annual', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: _isAnnualOnboarding ? _txt(isDark) : _sub(isDark))),
+        if (_isAnnualOnboarding) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.green.withOpacity(.1), borderRadius: BorderRadius.circular(4)), child: Text('Save 20%', style: GoogleFonts.dmSans(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.green)))],
+      ]);
+
+  Widget _buildPageReady(bool isDark) {
+    return _animatedContent(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          AnimatedBuilder(animation: _celebrationController, builder: (context, child) { final bounce = sin(_celebrationController.value * pi * 3) * .04; return Transform.scale(scale: 1.0 + bounce, child: child); }, child: Container(decoration: BoxDecoration(shape: BoxShape.circle, boxShadow: [BoxShadow(color: MioTheme.orange.withOpacity(.25), blurRadius: 50, spreadRadius: 10)]), child: const BrandMark(size: 120))),
+          const SizedBox(height: 32),
+          Text(_getReadyText(), style: GoogleFonts.dmSerifDisplay(fontSize: 32, fontWeight: FontWeight.bold, height: 1.3, color: isDark ? const Color(0xFFF7F7F7) : Colors.white), textAlign: TextAlign.center),
+          const SizedBox(height: 16),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12), decoration: BoxDecoration(color: _cardBg(isDark).withOpacity(isDark ? .8 : .75), borderRadius: BorderRadius.circular(16), border: Border.all(color: _cardBorder(isDark))), child: Text('Your AI assistant is ready. No yapping. ⚡', style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: _txt(isDark)))),
+        ]),
       ),
     );
   }
 }
 
-class _OnboardingBackgroundPainter extends CustomPainter {
+class _ShimmerButton extends StatelessWidget {
+  final AnimationController controller;
+  final VoidCallback onPressed;
+  final String label;
+  const _ShimmerButton({required this.controller, required this.onPressed, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) => Container(
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), gradient: LinearGradient(begin: Alignment(-1.0 + 2.0 * controller.value, 0), end: Alignment(1.0 + 2.0 * controller.value, 0), colors: const [MioTheme.orange, Color(0xFFE87020), MioTheme.orange]), boxShadow: [BoxShadow(color: MioTheme.orange.withOpacity(.3), blurRadius: 12, offset: const Offset(0, 4))]),
+        child: ElevatedButton(onPressed: onPressed, style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0), child: Text(label, style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w800))),
+      ),
+    );
+  }
+}
+
+class _ConfettiPainter extends CustomPainter {
+  final double progress;
+  _ConfettiPainter({required this.progress});
+
+  static final List<_Particle> _particles = List.generate(60, (i) {
+    final rng = Random(i);
+    return _Particle(x: rng.nextDouble(), startY: -0.1 - rng.nextDouble() * 0.4, speed: 0.25 + rng.nextDouble() * 0.6, drift: (rng.nextDouble() - 0.5) * 0.3, size: 3 + rng.nextDouble() * 6, rotation: rng.nextDouble() * pi * 2, color: const [Color(0xFFCC5801), Color(0xFF22C55E), Color(0xFF3B82F6), Color(0xFFF59E0B), Color(0xFFEC4899), Color(0xFF8B5CF6)][i % 6]);
+  });
+
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
-    paint.color = MioTheme.orange.withOpacity(.08);
-    canvas.drawCircle(Offset(size.width * .1, size.height * .15), 120, paint);
-    paint.color = MioTheme.orange2.withOpacity(.06);
-    canvas.drawCircle(Offset(size.width * .88, size.height * .22), 160, paint);
-    paint.color = Colors.white.withOpacity(.34);
-    canvas.drawCircle(Offset(size.width * .76, size.height * .86), 220, paint);
+    if (progress < .01) return;
+    for (final p in _particles) {
+      final y = (p.startY + progress * p.speed) * size.height;
+      if (y > size.height || y < -20) continue;
+      final x = (p.x + sin(progress * pi * 4 + p.rotation) * p.drift) * size.width;
+      final opacity = (1.0 - progress * .7).clamp(0.0, 1.0);
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(p.rotation + progress * pi * 3);
+      canvas.drawRect(Rect.fromCenter(center: Offset.zero, width: p.size, height: p.size * .5), Paint()..color = p.color.withOpacity((opacity * .85).toDouble()));
+      canvas.restore();
+    }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _ConfettiPainter oldDelegate) => oldDelegate.progress != progress;
+}
+
+class _Particle {
+  final double x, startY, speed, drift, size, rotation;
+  final Color color;
+  const _Particle({required this.x, required this.startY, required this.speed, required this.drift, required this.size, required this.rotation, required this.color});
 }
 
 
@@ -1604,20 +1891,118 @@ class ZeroFluffToggle extends StatelessWidget {
   }
 }
 
-class ProviderPill extends ConsumerWidget {
+
+class _ModelOption {
+  final String providerId;
+  final String provider;
+  final String model;
+  final String description;
+  final String logoAsset;
+  final Color color;
+  const _ModelOption({required this.providerId, required this.provider, required this.model, required this.description, required this.logoAsset, required this.color});
+}
+
+const _primaryModelOptions = <_ModelOption>[
+  _ModelOption(providerId: 'anthropic', provider: 'Anthropic', model: 'Claude 4 Sonnet', description: 'Best for deep reasoning', logoAsset: 'assets/icons/providers/anthropic.png', color: Color(0xFFCC785C)),
+  _ModelOption(providerId: 'openai', provider: 'OpenAI', model: 'GPT-4o', description: 'Fast multimodal generalist', logoAsset: 'assets/icons/providers/openai.png', color: Color(0xFF10A37F)),
+  _ModelOption(providerId: 'gemini', provider: 'Google', model: 'Gemini 2.5 Pro', description: 'Long-context planning', logoAsset: 'assets/icons/providers/google.png', color: Color(0xFF4285F4)),
+  _ModelOption(providerId: 'deepseek', provider: 'DeepSeek', model: 'DeepSeek R1', description: 'Reasoning on BYOK', logoAsset: 'assets/icons/providers/deepseek.png', color: Color(0xFF4D6BFE)),
+  _ModelOption(providerId: 'openrouter', provider: 'OpenRouter', model: 'OpenRouter', description: 'Many models through one key', logoAsset: 'assets/icons/providers/openrouter.png', color: Color(0xFF8B5CF6)),
+];
+
+const _moreModelOptions = <_ModelOption>[
+  _ModelOption(providerId: 'ollama', provider: 'Ollama', model: 'Ollama (Local)', description: 'Private local models', logoAsset: 'assets/icons/providers/ollama.png', color: Color(0xFF111827)),
+  _ModelOption(providerId: 'lmstudio', provider: 'LM Studio', model: 'LM Studio', description: 'Local OpenAI-compatible server', logoAsset: 'assets/icons/providers/ollama.png', color: Color(0xFF374151)),
+  _ModelOption(providerId: 'groq', provider: 'Groq', model: 'Groq', description: 'Ultra-fast hosted inference', logoAsset: 'assets/icons/providers/groq.png', color: Color(0xFFF97316)),
+  _ModelOption(providerId: 'mistral', provider: 'Mistral', model: 'Mistral', description: 'European open models', logoAsset: 'assets/icons/providers/mistral.png', color: Color(0xFFFF7000)),
+  _ModelOption(providerId: 'xai', provider: 'xAI', model: 'Grok', description: 'xAI API models', logoAsset: 'assets/icons/providers/openrouter.png', color: Color(0xFF111111)),
+];
+
+class ProviderPill extends ConsumerStatefulWidget {
   final AiProviderConfig provider;
   const ProviderPill({super.key, required this.provider});
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final app = ref.watch(appControllerProvider);
-    return PopupMenuButton<String>(
-      tooltip: 'Switch provider',
-      onSelected: app.chooseProvider,
-      itemBuilder: (_) => providers.map((p) => PopupMenuItem(value: p.id, child: Text(p.name))).toList(),
+  ConsumerState<ProviderPill> createState() => _ProviderPillState();
+}
+
+class _ProviderPillState extends ConsumerState<ProviderPill> {
+  RelativeRect _menuPosition({double dx = 0, double dy = 8, double width = 320}) {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final button = context.findRenderObject() as RenderBox;
+    final topLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
+    final left = (topLeft.dx + dx).clamp(8.0, max(8.0, overlay.size.width - width - 8));
+    final top = topLeft.dy + button.size.height + dy;
+    return RelativeRect.fromLTRB(left, top, overlay.size.width - left - width, 0);
+  }
+
+  Future<void> _showModelMenu() async {
+    final selected = await _showOptions(_primaryModelOptions, includeMore: true, position: _menuPosition(dx: -210, width: 320));
+    if (!mounted || selected == null) return;
+    if (selected == '__more__') {
+      final more = await _showOptions(_moreModelOptions, includeMore: false, position: _menuPosition(dx: 118, dy: 42, width: 320));
+      if (!mounted || more == null || more == '__more__') return;
+      ref.read(appControllerProvider).chooseProvider(more);
+      return;
+    }
+    ref.read(appControllerProvider).chooseProvider(selected);
+  }
+
+  Future<String?> _showOptions(List<_ModelOption> options, {required bool includeMore, required RelativeRect position}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF262626) : Colors.white;
+    final textPrimary = isDark ? const Color(0xFFF5F5F5) : const Color(0xFF1A1A1A);
+    final textMuted = isDark ? const Color(0xFF888888) : const Color(0xFF666666);
+    return showMenu<String>(
+      context: context,
+      position: position,
+      color: bg,
+      elevation: 18,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: isDark ? const Color(0xFF3A3A3A) : MioTheme.line)),
+      constraints: const BoxConstraints(minWidth: 320, maxWidth: 320),
+      items: [
+        ...options.map((m) => PopupMenuItem<String>(
+              value: m.providerId,
+              padding: EdgeInsets.zero,
+              height: 54,
+              child: _modelMenuRow(m, textPrimary, textMuted),
+            )),
+        if (includeMore)
+          PopupMenuItem<String>(
+            value: '__more__',
+            padding: EdgeInsets.zero,
+            height: 50,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(children: [Icon(Icons.expand_more, size: 18, color: textMuted), const SizedBox(width: 12), Expanded(child: Text('More models', style: GoogleFonts.dmSans(fontSize: 14, color: textPrimary, fontWeight: FontWeight.w600))), Text('Ollama', style: GoogleFonts.dmSans(fontSize: 12, color: textMuted)), const SizedBox(width: 8), Icon(Icons.chevron_right, size: 18, color: textMuted)]),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _modelMenuRow(_ModelOption option, Color textPrimary, Color textMuted) {
+    final selected = ref.read(appControllerProvider).selectedProviderId == option.providerId;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+        _ProviderLogo(asset: option.logoAsset, fallback: option.provider.substring(0, 1), color: option.color, size: 28),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [Text(option.model, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.dmSans(fontSize: 14, color: textPrimary, fontWeight: selected ? FontWeight.w700 : FontWeight.w600)), Text(option.description, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.dmSans(fontSize: 12, color: textMuted))])),
+        if (selected) const Icon(Icons.check, size: 18, color: Color(0xFF4285F4)),
+      ]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: _showModelMenu,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
         decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(999), border: Border.all(color: MioTheme.line)),
-        child: Row(children: [const Icon(Icons.hub_rounded, size: 17, color: MioTheme.orange), const SizedBox(width: 8), Text(provider.name, style: const TextStyle(fontWeight: FontWeight.w700)), const Icon(Icons.keyboard_arrow_down_rounded, size: 18)]),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [_ProviderLogo(asset: _providerLogoForId(widget.provider.id), fallback: widget.provider.name.substring(0, 1), color: MioTheme.orange, size: 20), const SizedBox(width: 8), Text(widget.provider.name, style: const TextStyle(fontWeight: FontWeight.w700)), const Icon(Icons.keyboard_arrow_down_rounded, size: 18)]),
       ),
     );
   }
@@ -1747,54 +2132,29 @@ class Avatar extends StatelessWidget {
   }
 }
 
-class Composer extends ConsumerWidget {
+
+class Composer extends ConsumerStatefulWidget {
   const Composer({super.key});
 
-  Future<bool> _confirmAndRequestPermission(
-    BuildContext context,
-    Permission permission,
-    String title,
-    String body,
-  ) async {
-    final explain = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(body),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Not now')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Allow')),
-        ],
-      ),
-    );
+  @override
+  ConsumerState<Composer> createState() => _ComposerState();
+}
+
+class _ComposerState extends ConsumerState<Composer> {
+  final GlobalKey _plusButtonKey = GlobalKey();
+
+  Future<bool> _confirmAndRequestPermission(BuildContext context, Permission permission, String title, String body) async {
+    final explain = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: Text(title), content: Text(body), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Not now')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Allow'))]));
     if (explain != true) return false;
     final status = await permission.request();
     if (status.isGranted || status.isLimited) return true;
     if (status.isPermanentlyDenied && context.mounted) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Permission blocked'),
-          content: const Text('Open system settings to allow this permission for Mio.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            FilledButton(onPressed: () { openAppSettings(); Navigator.pop(context); }, child: const Text('Open Settings')),
-          ],
-        ),
-      );
+      await showDialog<void>(context: context, builder: (context) => AlertDialog(title: const Text('Permission blocked'), content: const Text('Open system settings to allow this permission for Mio.'), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () { openAppSettings(); Navigator.pop(context); }, child: const Text('Open Settings'))]));
     }
     return false;
   }
 
-  Future<void> _runWithPermission(
-    BuildContext context,
-    AppController app,
-    Permission permission,
-    String title,
-    String body,
-    String deniedLabel,
-    Future<void> Function() action,
-  ) async {
+  Future<void> _runWithPermission(BuildContext context, AppController app, Permission permission, String title, String body, String deniedLabel, Future<void> Function() action) async {
     final allowed = await _confirmAndRequestPermission(context, permission, title, body);
     if (!allowed) {
       app.permissionDeniedNotice(deniedLabel);
@@ -1803,82 +2163,87 @@ class Composer extends ConsumerWidget {
     await action();
   }
 
-  Future<void> _enableNotifications(BuildContext context, AppController app) async {
-    final allowed = await _confirmAndRequestPermission(
-      context,
-      Permission.notification,
-      'Allow notifications?',
-      'Mio will only notify you for task completion, reminders, and scheduled summaries you enable.',
+  void _showComingSoon(String label) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label is ready for connector wiring.')));
+  }
+
+  RelativeRect _plusMenuPosition() {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final buttonContext = _plusButtonKey.currentContext ?? context;
+    final button = buttonContext.findRenderObject() as RenderBox;
+    final topLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
+    final menuWidth = 260.0;
+    final left = topLeft.dx.clamp(8.0, max(8.0, overlay.size.width - menuWidth - 8));
+    final top = max(8.0, topLeft.dy - 350);
+    return RelativeRect.fromLTRB(left, top, overlay.size.width - left - menuWidth, 0);
+  }
+
+  Future<void> _showPlusMenu(AppController app) async {
+    final selected = await showMenu<String>(
+      context: context,
+      position: _plusMenuPosition(),
+      color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF262626) : Colors.white,
+      elevation: 20,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      constraints: const BoxConstraints(minWidth: 260, maxWidth: 260),
+      items: [
+        _popupMenuItem('files', Icons.attach_file, 'Add files or photos'),
+        _popupMenuItem('project', Icons.folder_outlined, 'Add to project', hasChevron: true),
+        _popupMenuItem('skills', Icons.construction_outlined, 'Skills', hasChevron: true),
+        _popupMenuItem('connectors', Icons.power_outlined, 'Connectors', hasChevron: true),
+        _popupMenuItem('plugins', Icons.extension_outlined, 'Plugins', hasChevron: true),
+        const PopupMenuDivider(height: 1),
+        _popupMenuItem('research', Icons.search_outlined, 'Research'),
+        _popupMenuItem('web', Icons.language_outlined, 'Web search', trailing: const Icon(Icons.check, size: 18, color: Color(0xFF4285F4))),
+        _popupMenuItem('style', Icons.brush_outlined, 'Use style', hasChevron: true),
+      ],
     );
-    if (allowed) {
-      app.enableNotificationsNotice();
-    } else {
-      app.permissionDeniedNotice('Notifications');
+    if (!mounted || selected == null) return;
+    switch (selected) {
+      case 'files':
+        await _runWithPermission(context, app, Permission.storage, 'Allow document access?', 'Mio opens the system picker only when you choose files or photos to attach.', 'Files', app.attachDocument);
+        break;
+      case 'project':
+        _showComingSoon('Projects');
+        break;
+      case 'skills':
+        _showComingSoon('Skills');
+        break;
+      case 'connectors':
+        app.runNotionConnector();
+        break;
+      case 'plugins':
+        _showComingSoon('Plugins');
+        break;
+      case 'research':
+        if (!app.deepResearchMode) app.toggleDeepResearch();
+        break;
+      case 'web':
+        app.runWebSearchConnector();
+        break;
+      case 'style':
+        _showComingSoon('Use style');
+        break;
     }
   }
 
-  void _showLinkDialog(BuildContext context, AppController app) {
-    final controller = TextEditingController();
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Attach link'),
-        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'URL', border: OutlineInputBorder())),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () { app.attachLink(controller.text); Navigator.pop(context); }, child: const Text('Attach')),
-        ],
-      ),
-    );
-  }
-
-  void _showAttachmentMenu(BuildContext context, AppController app) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: MioTheme.panel,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Attach', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _AttachmentItem(icon: Icons.camera_alt_rounded, label: 'Camera', onTap: () { Navigator.pop(context); _runWithPermission(context, app, Permission.camera, 'Allow camera?', 'Mio needs camera access only when you attach a new photo to the chat.', 'Camera', app.attachCamera); }),
-                  _AttachmentItem(icon: Icons.photo_library_rounded, label: 'Gallery', onTap: () { Navigator.pop(context); _runWithPermission(context, app, Permission.photos, 'Allow photo library?', 'Mio needs photo access only when you attach images from your gallery.', 'Gallery', app.attachGallery); }),
-                  _AttachmentItem(icon: Icons.description_rounded, label: 'Document', onTap: () { Navigator.pop(context); _runWithPermission(context, app, Permission.storage, 'Allow document access?', 'Mio opens the system file picker only when you choose documents to attach.', 'Documents', app.attachDocument); }),
-                  _AttachmentItem(icon: Icons.link_rounded, label: 'Link', onTap: () { Navigator.pop(context); _showLinkDialog(context, app); }),
-                ],
-              ),
-              const SizedBox(height: 24),
-              const Divider(color: MioTheme.line),
-              const SizedBox(height: 24),
-              Text('Skills & Connectors', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: MioTheme.muted, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 18),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _AttachmentItem(icon: Icons.public_rounded, label: 'Web Search', onTap: () { Navigator.pop(context); app.runWebSearchConnector(); }),
-                  _AttachmentItem(icon: Icons.edit_note_rounded, label: 'Notion', onTap: () { Navigator.pop(context); app.runNotionConnector(); }),
-                  _AttachmentItem(icon: Icons.folder_zip_rounded, label: 'GitHub', onTap: () { Navigator.pop(context); app.runGitHubConnector(); }),
-                  _AttachmentItem(icon: Icons.mail_rounded, label: 'Gmail', onTap: () { Navigator.pop(context); app.runGmailConnector(); }),
-                  _AttachmentItem(icon: Icons.notifications_rounded, label: 'Notify', onTap: () { Navigator.pop(context); _enableNotifications(context, app); }),
-                ],
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
+  PopupMenuItem<String> _popupMenuItem(String value, IconData icon, String label, {bool hasChevron = false, Widget? trailing}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark ? const Color(0xFFF5F5F5) : const Color(0xFF1A1A1A);
+    final textMuted = isDark ? const Color(0xFF888888) : const Color(0xFF666666);
+    return PopupMenuItem<String>(
+      value: value,
+      padding: EdgeInsets.zero,
+      height: 42,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(children: [Icon(icon, size: 18, color: textMuted), const SizedBox(width: 12), Expanded(child: Text(label, style: GoogleFonts.dmSans(fontSize: 14, color: textPrimary, fontWeight: FontWeight.w500))), if (trailing != null) trailing, if (hasChevron) Icon(Icons.chevron_right, size: 18, color: textMuted)]),
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final app = ref.watch(appControllerProvider);
     final bottom = MediaQuery.of(context).padding.bottom;
     return Container(
@@ -1890,29 +2255,11 @@ class Composer extends ConsumerWidget {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(28), border: Border.all(color: MioTheme.line), boxShadow: [BoxShadow(color: Colors.black.withOpacity(.06), blurRadius: 30, offset: const Offset(0, 12))]),
           child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            IconButton(
-              onPressed: () => _showAttachmentMenu(context, app),
-              icon: const Icon(Icons.add_rounded),
-              tooltip: 'Attach',
-            ),
-            Expanded(
-              child: TextField(
-                controller: app.inputController,
-                focusNode: app.inputFocusNode,
-                minLines: 1,
-                maxLines: 6,
-                textInputAction: TextInputAction.newline,
-                decoration: const InputDecoration(hintText: 'Ask anything…', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 13)),
-                onSubmitted: (_) => app.sendPrompt(),
-              ),
-            ),
+            IconButton(key: _plusButtonKey, onPressed: () => _showPlusMenu(app), icon: const Icon(Icons.add_rounded), tooltip: 'Attach'),
+            Expanded(child: TextField(controller: app.inputController, focusNode: app.inputFocusNode, minLines: 1, maxLines: 6, textInputAction: TextInputAction.newline, decoration: const InputDecoration(hintText: 'Ask anything…', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 13)), onSubmitted: (_) => app.sendPrompt())),
             if (app.error.isNotEmpty) Tooltip(message: app.error, child: const Icon(Icons.warning_rounded, color: MioTheme.orange)),
             const SizedBox(width: 6),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: MioTheme.orange, foregroundColor: Colors.white, shape: const CircleBorder(), padding: const EdgeInsets.all(14)),
-              onPressed: app.isStreaming ? null : app.sendPrompt,
-              child: app.isStreaming ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.arrow_upward_rounded),
-            ),
+            FilledButton(style: FilledButton.styleFrom(backgroundColor: MioTheme.orange, foregroundColor: Colors.white, shape: const CircleBorder(), padding: const EdgeInsets.all(14)), onPressed: app.isStreaming ? null : app.sendPrompt, child: app.isStreaming ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.arrow_upward_rounded)),
           ]),
         ),
       ),

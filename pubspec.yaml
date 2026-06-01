@@ -26,6 +26,7 @@ dependencies:
   image_picker: ^1.1.2
   permission_handler: ^11.3.1
   lottie: ^3.1.2
+  shimmer: ^3.0.0
 
 dev_dependencies:
   flutter_test:
@@ -35,6 +36,14 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/icons/
-    - assets/images/
-    - assets/animations/
+    - assets/animations/mascot.json
+    - assets/images/sky_clouds.png
+    - assets/icons/providers/anthropic.png
+    - assets/icons/providers/deepseek.png
+    - assets/icons/providers/google.png
+    - assets/icons/providers/groq.png
+    - assets/icons/providers/kimi.png
+    - assets/icons/providers/mistral.png
+    - assets/icons/providers/ollama.png
+    - assets/icons/providers/openai.png
+    - assets/icons/providers/openrouter.png
