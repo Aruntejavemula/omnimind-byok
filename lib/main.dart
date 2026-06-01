@@ -564,13 +564,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
       body: Stack(
         children: [
           Positioned.fill(
-            child: AnimatedBuilder(
-              animation: _floatController,
-              builder: (context, child) => Transform.translate(offset: Offset(0, -4 + 8 * _floatController.value), child: child),
-              child: Image.asset('assets/images/sky_clouds.png', fit: BoxFit.cover),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark ? [const Color(0xFF0F0F0E), const Color(0xFF1A1A19)] : [const Color(0xFFB8E4F9), const Color(0xFFE8F4FB)],
+                ),
+              ),
             ),
           ),
-          if (isDark) Positioned.fill(child: Container(color: Colors.black.withOpacity(.55))),
           SafeArea(
             child: Column(
               children: [
@@ -1169,11 +1172,21 @@ class MioTheme {
   static ThemeData get dark {
     final base = ThemeData.dark(useMaterial3: true);
     return base.copyWith(
-      scaffoldBackgroundColor: const Color(0xFF0B0B0A),
-      colorScheme: ColorScheme.fromSeed(seedColor: orange, brightness: Brightness.dark),
-      textTheme: GoogleFonts.interTextTheme(base.textTheme),
+      scaffoldBackgroundColor: const Color(0xFF0F0F0E),
+      colorScheme: ColorScheme.fromSeed(seedColor: orange, brightness: Brightness.dark, surface: const Color(0xFF1A1A19), surfaceContainer: const Color(0xFF252524)),
+      textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(bodyColor: const Color(0xFFE8E8E8), displayColor: const Color(0xFFF5F5F5)),
+      dividerColor: const Color(0xFF3A3A39),
+      splashColor: orange.withOpacity(.12),
+      highlightColor: orange.withOpacity(.06),
     );
   }
+
+  // Dark mode colors
+  static const darkBg = Color(0xFF0F0F0E);
+  static const darkPanel = Color(0xFF1A1A19);
+  static const darkText = Color(0xFFE8E8E8);
+  static const darkMuted = Color(0xFF8A8A89);
+  static const darkLine = Color(0xFF3A3A39);
 }
 
 class AiProviderConfig {
