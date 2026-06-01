@@ -193,12 +193,36 @@ class WelcomeLoginScreen extends StatefulWidget {
 class _WelcomeLoginScreenState extends State<WelcomeLoginScreen> {
   bool _loading = false;
 
-  Future<void> _continueLocalFirst() async {
+  Future<void> _openLocalFirst() async {
     setState(() => _loading = true);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('mio_welcome_complete', true);
     if (!mounted) return;
     context.go('/chat');
+  }
+
+  Future<void> _confirmLocalFirst() async {
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: MioTheme.panel,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Use Mio on this device only?'),
+        content: const Text('Local-first mode keeps your chats and provider keys on this device. Cross-device sync, account recovery, and encrypted cloud backup will stay off until you sign in.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Continue local-only')),
+        ],
+      ),
+    );
+    if (proceed == true) {
+      await _openLocalFirst();
+    }
+  }
+
+  void _showAuthUnavailable(String provider) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$provider sign-in is ready to wire when Supabase auth credentials are provided.')));
   }
 
   @override
@@ -231,10 +255,11 @@ class _WelcomeLoginScreenState extends State<WelcomeLoginScreen> {
                           const SizedBox(height: 30),
                           SizedBox(
                             width: double.infinity,
-                            child: FilledButton(
+                            child: FilledButton.icon(
                               style: FilledButton.styleFrom(backgroundColor: MioTheme.ink, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 17), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
-                              onPressed: _loading ? null : _continueLocalFirst,
-                              child: Text(_loading ? 'Opening Mio...' : 'Continue local-first', style: const TextStyle(fontWeight: FontWeight.w800)),
+                              onPressed: _loading ? null : () => _showAuthUnavailable('Google'),
+                              icon: const Icon(Icons.g_mobiledata_rounded),
+                              label: const Text('Continue with Google', style: TextStyle(fontWeight: FontWeight.w800)),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -242,9 +267,27 @@ class _WelcomeLoginScreenState extends State<WelcomeLoginScreen> {
                             width: double.infinity,
                             child: OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(foregroundColor: MioTheme.ink, side: const BorderSide(color: MioTheme.line), padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
-                              onPressed: _loading ? null : () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Supabase auth is ready to wire when credentials are provided.'))),
-                              icon: const Icon(Icons.lock_outline_rounded),
-                              label: const Text('Sign in / sync later', style: TextStyle(fontWeight: FontWeight.w800)),
+                              onPressed: _loading ? null : () => _showAuthUnavailable('Apple'),
+                              icon: const Icon(Icons.apple),
+                              label: const Text('Continue with Apple', style: TextStyle(fontWeight: FontWeight.w800)),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(foregroundColor: MioTheme.ink, side: const BorderSide(color: MioTheme.line), padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
+                              onPressed: _loading ? null : () => _showAuthUnavailable('Email'),
+                              icon: const Icon(Icons.mail_outline_rounded),
+                              label: const Text('Continue with email', style: TextStyle(fontWeight: FontWeight.w800)),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: _loading ? null : _confirmLocalFirst,
+                              icon: const Icon(Icons.devices_other_rounded, size: 18),
+                              label: Text(_loading ? 'Opening Mio...' : 'Continue local-first — no cross-device sync', style: const TextStyle(fontWeight: FontWeight.w800)),
                             ),
                           ),
                         ],
