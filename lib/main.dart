@@ -6,8 +6,10 @@ import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -222,6 +224,7 @@ class AppController extends ChangeNotifier {
   final _storage = const FlutterSecureStorage();
   final _dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 30), receiveTimeout: const Duration(seconds: 120)));
   final _uuid = const Uuid();
+  final _imagePicker = ImagePicker();
   final _syncService = E2EESyncService();
   final _researchService = DeepResearchService();
 
@@ -321,6 +324,119 @@ class AppController extends ChangeNotifier {
     messages = [ChatMessage(id: _uuid.v4(), role: 'assistant', content: 'New chat. Direct mode is on.')];
     saveState();
     notifyListeners();
+  }
+
+  Future<void> attachCamera() async {
+    final image = await _imagePicker.pickImage(source: ImageSource.camera, imageQuality: 82);
+    if (image == null) return;
+    _addAttachmentMessage('Camera image attached', image.name, image.path);
+  }
+
+  Future<void> attachGallery() async {
+    final images = await _imagePicker.pickMultiImage(imageQuality: 82);
+    if (images.isEmpty) return;
+    final names = images.map((x) => x.name).join(', ');
+    final paths = images.map((x) => x.path).join('\n');
+    _addAttachmentMessage('${images.length} gallery item(s) attached', names, paths);
+  }
+
+  Future<void> attachDocument() async {
+    final result = await FilePicker.platform.pickFiles(allowMultiple: true, withData: false);
+    if (result == null || result.files.isEmpty) return;
+    final names = result.files.map((f) => f.name).join(', ');
+    final paths = result.files.map((f) => f.path ?? f.name).join('\n');
+    _addAttachmentMessage('${result.files.length} document(s) attached', names, paths);
+  }
+
+  void attachLink(String url) {
+    final clean = url.trim();
+    if (clean.isEmpty) return;
+    _addAttachmentMessage('Link attached', clean, clean);
+  }
+
+  void _addAttachmentMessage(String title, String name, String value) {
+    messages.add(ChatMessage(id: _uuid.v4(), role: 'user', content: '**$title**\n\n$name\n\n$value'));
+    messages.add(ChatMessage(id: _uuid.v4(), role: 'assistant', content: 'Attached. Ask what you want me to do with it.'));
+    saveState();
+    notifyListeners();
+    _scrollToBottom();
+  }
+
+  String _activeQuery() => inputController.text.trim().isEmpty ? 'latest AI news' : inputController.text.trim();
+
+  void _addAssistantNotice(String content) {
+    messages.add(ChatMessage(id: _uuid.v4(), role: 'assistant', content: content));
+    saveState();
+    notifyListeners();
+    _scrollToBottom();
+  }
+
+  Future<void> runWebSearchConnector() async {
+    final query = _activeQuery();
+    try {
+      final res = await _dio.get<dynamic>('https://api.duckduckgo.com/', queryParameters: {'q': query, 'format': 'json', 'no_html': '1', 'skip_disambig': '1'});
+      final data = res.data as Map<String, dynamic>;
+      final abstract = (data['AbstractText'] as String? ?? '').trim();
+      final heading = (data['Heading'] as String? ?? query).trim();
+      final topics = (data['RelatedTopics'] as List<dynamic>? ?? []).take(5).map((t) {
+        if (t is Map && t['Text'] != null) return '- ${t['Text']}';
+        return null;
+      }).whereType<String>().join('\n');
+      final body = abstract.isNotEmpty ? abstract : (topics.isNotEmpty ? topics : 'No instant result returned. Try a more specific search.');
+      _addAssistantNotice('**Web Search: $heading**\n\n$body');
+    } catch (e) {
+      _addAssistantNotice('Web Search failed: ${e.toString()}');
+    }
+  }
+
+  Future<void> runGitHubConnector() async {
+    final query = _activeQuery();
+    try {
+      final token = await _storage.read(key: 'connector_token_github');
+      final headers = <String, String>{'Accept': 'application/vnd.github+json'};
+      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+      final res = await _dio.get<dynamic>('https://api.github.com/search/repositories', queryParameters: {'q': query, 'per_page': '5'}, options: Options(headers: headers));
+      final items = res.data['items'] as List<dynamic>? ?? [];
+      if (items.isEmpty) return _addAssistantNotice('GitHub: no repositories found for "$query".');
+      final lines = items.map((repo) => '- **${repo['full_name']}**: ${repo['html_url']}').join('\n');
+      _addAssistantNotice('**GitHub results for "$query"**\n\n$lines');
+    } catch (e) {
+      _addAssistantNotice('GitHub connector failed: ${e.toString()}');
+    }
+  }
+
+  Future<void> runNotionConnector() async {
+    final query = _activeQuery();
+    final token = await _storage.read(key: 'connector_token_notion');
+    if (token == null || token.isEmpty) {
+      return _addAssistantNotice('Notion connector needs a Notion integration token saved as `connector_token_notion` before it can search your workspace.');
+    }
+    try {
+      final res = await _dio.post<dynamic>('https://api.notion.com/v1/search', options: Options(headers: {'Authorization': 'Bearer $token', 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json'}), data: {'query': query, 'page_size': 5});
+      final results = res.data['results'] as List<dynamic>? ?? [];
+      if (results.isEmpty) return _addAssistantNotice('Notion: no results found for "$query".');
+      final lines = results.map((item) => '- ${item['object']} ${item['id']}').join('\n');
+      _addAssistantNotice('**Notion results for "$query"**\n\n$lines');
+    } catch (e) {
+      _addAssistantNotice('Notion connector failed: ${e.toString()}');
+    }
+  }
+
+  Future<void> runGmailConnector() async {
+    final query = _activeQuery();
+    final token = await _storage.read(key: 'connector_token_gmail');
+    if (token == null || token.isEmpty) {
+      return _addAssistantNotice('Gmail connector needs a Google OAuth access token saved as `connector_token_gmail`. For production, add OAuth through Supabase Auth or a Railway backend callback.');
+    }
+    try {
+      final res = await _dio.get<dynamic>('https://gmail.googleapis.com/gmail/v1/users/me/messages', queryParameters: {'q': query, 'maxResults': '5'}, options: Options(headers: {'Authorization': 'Bearer $token'}));
+      final messagesList = res.data['messages'] as List<dynamic>? ?? [];
+      if (messagesList.isEmpty) return _addAssistantNotice('Gmail: no messages found for "$query".');
+      final lines = messagesList.map((m) => '- message id: ${m['id']}').join('\n');
+      _addAssistantNotice('**Gmail results for "$query"**\n\n$lines');
+    } catch (e) {
+      _addAssistantNotice('Gmail connector failed: ${e.toString()}');
+    }
   }
 
   Future<void> sendPrompt() async {
@@ -836,7 +952,23 @@ class Avatar extends StatelessWidget {
 
 class Composer extends ConsumerWidget {
   const Composer({super.key});
-  void _showAttachmentMenu(BuildContext context) {
+
+  void _showLinkDialog(BuildContext context, AppController app) {
+    final controller = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Attach link'),
+        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'URL', border: OutlineInputBorder())),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: () { app.attachLink(controller.text); Navigator.pop(context); }, child: const Text('Attach')),
+        ],
+      ),
+    );
+  }
+
+  void _showAttachmentMenu(BuildContext context, AppController app) {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: MioTheme.panel,
@@ -852,10 +984,10 @@ class Composer extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _AttachmentItem(icon: Icons.camera_alt_rounded, label: 'Camera', onTap: () => Navigator.pop(context)),
-                  _AttachmentItem(icon: Icons.photo_library_rounded, label: 'Gallery', onTap: () => Navigator.pop(context)),
-                  _AttachmentItem(icon: Icons.description_rounded, label: 'Document', onTap: () => Navigator.pop(context)),
-                  _AttachmentItem(icon: Icons.link_rounded, label: 'Link', onTap: () => Navigator.pop(context)),
+                  _AttachmentItem(icon: Icons.camera_alt_rounded, label: 'Camera', onTap: () { Navigator.pop(context); app.attachCamera(); }),
+                  _AttachmentItem(icon: Icons.photo_library_rounded, label: 'Gallery', onTap: () { Navigator.pop(context); app.attachGallery(); }),
+                  _AttachmentItem(icon: Icons.description_rounded, label: 'Document', onTap: () { Navigator.pop(context); app.attachDocument(); }),
+                  _AttachmentItem(icon: Icons.link_rounded, label: 'Link', onTap: () { Navigator.pop(context); _showLinkDialog(context, app); }),
                 ],
               ),
               const SizedBox(height: 24),
@@ -866,10 +998,10 @@ class Composer extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _AttachmentItem(icon: Icons.public_rounded, label: 'Web Search', onTap: () => Navigator.pop(context)),
-                  _AttachmentItem(icon: Icons.edit_note_rounded, label: 'Notion', onTap: () => Navigator.pop(context)),
-                  _AttachmentItem(icon: Icons.folder_zip_rounded, label: 'GitHub', onTap: () => Navigator.pop(context)),
-                  _AttachmentItem(icon: Icons.mail_rounded, label: 'Gmail', onTap: () => Navigator.pop(context)),
+                  _AttachmentItem(icon: Icons.public_rounded, label: 'Web Search', onTap: () { Navigator.pop(context); app.runWebSearchConnector(); }),
+                  _AttachmentItem(icon: Icons.edit_note_rounded, label: 'Notion', onTap: () { Navigator.pop(context); app.runNotionConnector(); }),
+                  _AttachmentItem(icon: Icons.folder_zip_rounded, label: 'GitHub', onTap: () { Navigator.pop(context); app.runGitHubConnector(); }),
+                  _AttachmentItem(icon: Icons.mail_rounded, label: 'Gmail', onTap: () { Navigator.pop(context); app.runGmailConnector(); }),
                 ],
               ),
               const SizedBox(height: 12),
@@ -894,7 +1026,7 @@ class Composer extends ConsumerWidget {
           decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(28), border: Border.all(color: MioTheme.line), boxShadow: [BoxShadow(color: Colors.black.withOpacity(.06), blurRadius: 30, offset: const Offset(0, 12))]),
           child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
             IconButton(
-              onPressed: () => _showAttachmentMenu(context),
+              onPressed: () => _showAttachmentMenu(context, app),
               icon: const Icon(Icons.add_rounded),
               tooltip: 'Attach',
             ),
