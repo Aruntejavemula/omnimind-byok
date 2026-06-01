@@ -2360,6 +2360,56 @@ class Avatar extends StatelessWidget {
 }
 
 
+class _ModelPickerButton extends StatelessWidget {
+  final AppController app;
+  const _ModelPickerButton({required this.app});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = providers.firstWhere((p) => p.id == app.selectedProviderId, orElse: () => providers.first);
+    final models = _getModelsForProvider(provider.id);
+    
+    return PopupMenuButton<String>(
+      onSelected: (model) => app.setSelectedModel(model),
+      itemBuilder: (context) => models.map((model) => PopupMenuItem(value: model, child: Text(model))).toList(),
+      child: Tooltip(
+        message: 'Switch model',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.08), borderRadius: BorderRadius.circular(8)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.model_training_rounded, size: 16, color: MioTheme.orange),
+              const SizedBox(width: 6),
+              Text(provider.model.split('-').last, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: MioTheme.orange)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<String> _getModelsForProvider(String providerId) {
+    switch (providerId) {
+      case 'openai':
+        return ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4'];
+      case 'anthropic':
+        return ['claude-4-6-sonnet-latest', 'claude-3-5-sonnet-latest', 'claude-3-opus-latest', 'claude-3-haiku-latest'];
+      case 'gemini':
+        return ['gemini-3-5-pro', 'gemini-2-5-pro', 'gemini-2-5-flash', 'gemini-3-5-flash'];
+      case 'deepseek':
+        return ['deepseek-chat', 'deepseek-reasoner'];
+      case 'groq':
+        return ['llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
+      case 'mistral':
+        return ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest'];
+      default:
+        return [provider.model];
+    }
+  }
+}
+
 class Composer extends ConsumerStatefulWidget {
   const Composer({super.key});
 
@@ -2485,6 +2535,8 @@ class _ComposerState extends ConsumerState<Composer> {
             IconButton(key: _plusButtonKey, onPressed: () => _showPlusMenu(app), icon: const Icon(Icons.add_rounded), tooltip: 'Attach'),
             Expanded(child: TextField(controller: app.inputController, focusNode: app.inputFocusNode, minLines: 1, maxLines: 6, textInputAction: TextInputAction.newline, decoration: const InputDecoration(hintText: 'Ask anything…', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 13)), onSubmitted: (_) => app.sendPrompt())),
             if (app.error.isNotEmpty) Tooltip(message: app.error, child: const Icon(Icons.warning_rounded, color: MioTheme.orange)),
+            const SizedBox(width: 6),
+            _ModelPickerButton(app: app),
             const SizedBox(width: 6),
             IconButton(onPressed: () => context.go('/settings/api-keys'), icon: const Icon(Icons.key_rounded), tooltip: 'API Keys'),
             const SizedBox(width: 6),
