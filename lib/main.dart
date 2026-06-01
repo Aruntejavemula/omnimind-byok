@@ -1776,6 +1776,147 @@ class AppController extends ChangeNotifier {
   }
 }
 
+class CodeModeScreen extends ConsumerStatefulWidget {
+  const CodeModeScreen({super.key});
+  @override
+  ConsumerState<CodeModeScreen> createState() => _CodeModeScreenState();
+}
+
+class _CodeModeScreenState extends ConsumerState<CodeModeScreen> {
+  late TextEditingController _codeController;
+  String _previewHtml = '<html><body><h1>Preview</h1></body></html>';
+  String _errors = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _codeController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  void _executeCode() {
+    final code = _codeController.text;
+    // Simple validation for HTML/CSS/JS
+    if (code.isEmpty) {
+      setState(() => _errors = 'Code is empty');
+      return;
+    }
+    
+    try {
+      // For now, just use the code as-is for preview
+      setState(() {
+        _previewHtml = code;
+        _errors = '';
+      });
+    } catch (e) {
+      setState(() => _errors = 'Error: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: MioTheme.cream,
+      body: Row(
+        children: [
+          // Code editor
+          Expanded(
+            flex: 1,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      const Text('Code Editor', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      const Spacer(),
+                      FilledButton.icon(onPressed: _executeCode, icon: const Icon(Icons.play_arrow_rounded), label: const Text('Run'), style: FilledButton.styleFrom(backgroundColor: MioTheme.orange)),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(8), border: Border.all(color: MioTheme.line)),
+                    child: TextField(
+                      controller: _codeController,
+                      maxLines: null,
+                      expands: true,
+                      style: const TextStyle(color: Colors.white, fontFamily: 'Courier', fontSize: 12),
+                      decoration: const InputDecoration(
+                        hintText: 'Write your HTML/CSS/JS here...',
+                        hintStyle: TextStyle(color: Color(0xFF666666)),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.all(12),
+                      ),
+                    ),
+                  ),
+                ),
+                if (_errors.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: MioTheme.orange)),
+                    child: Text(_errors, style: const TextStyle(color: MioTheme.orange, fontSize: 12)),
+                  ),
+              ],
+            ),
+          ),
+          
+          // Divider
+          Container(width: 1, color: MioTheme.line),
+          
+          // Preview
+          Expanded(
+            flex: 1,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      const Text('Preview', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      const Spacer(),
+                      IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _executeCode, tooltip: 'Refresh'),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: MioTheme.line)),
+                    child: SingleChildScrollView(
+                      child: Html(data: _previewHtml),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class Html extends StatelessWidget {
+  final String data;
+  const Html({super.key, required this.data});
+  
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Text(data, style: const TextStyle(fontFamily: 'Courier', fontSize: 12)),
+    );
+  }
+}
+
 class ShellScreen extends ConsumerWidget {
   const ShellScreen({super.key});
 
