@@ -793,6 +793,32 @@ class MessageTile extends StatelessWidget {
   }
 }
 
+class _AttachmentItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _AttachmentItem({required this.icon, required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(color: MioTheme.cream2, borderRadius: BorderRadius.circular(18), border: Border.all(color: MioTheme.line)),
+            child: Icon(icon, color: MioTheme.orange, size: 24),
+          ),
+          const SizedBox(height: 10),
+          Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
 class Avatar extends StatelessWidget {
   final String label;
   final bool dark;
@@ -810,6 +836,36 @@ class Avatar extends StatelessWidget {
 
 class Composer extends ConsumerWidget {
   const Composer({super.key});
+  void _showAttachmentMenu(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: MioTheme.panel,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Attach', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _AttachmentItem(icon: Icons.camera_alt_rounded, label: 'Camera', onTap: () => Navigator.pop(context)),
+                  _AttachmentItem(icon: Icons.photo_library_rounded, label: 'Gallery', onTap: () => Navigator.pop(context)),
+                  _AttachmentItem(icon: Icons.description_rounded, label: 'Document', onTap: () => Navigator.pop(context)),
+                  _AttachmentItem(icon: Icons.link_rounded, label: 'Link', onTap: () => Navigator.pop(context)),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appControllerProvider);
@@ -823,7 +879,11 @@ class Composer extends ConsumerWidget {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(28), border: Border.all(color: MioTheme.line), boxShadow: [BoxShadow(color: Colors.black.withOpacity(.06), blurRadius: 30, offset: const Offset(0, 12))]),
           child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            IconButton(onPressed: () {}, icon: const Icon(Icons.add_rounded), tooltip: 'Attach'),
+            IconButton(
+              onPressed: () => _showAttachmentMenu(context),
+              icon: const Icon(Icons.add_rounded),
+              tooltip: 'Attach',
+            ),
             Expanded(
               child: TextField(
                 controller: app.inputController,
