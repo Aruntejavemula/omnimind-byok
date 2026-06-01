@@ -2230,21 +2230,79 @@ class MessageTile extends StatelessWidget {
               ),
               child: isUser
                   ? Text(message.content, style: const TextStyle(color: Colors.white, fontSize: 15.5, height: 1.48))
-                  : MarkdownBody(
-                      data: message.content.isEmpty ? 'Thinking…' : message.content,
+                  : (message.content.isEmpty ? const _ThinkingAnimation() : MarkdownBody(
+                      data: message.content,
                       selectable: true,
                       styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
                         p: const TextStyle(fontSize: 16, height: 1.62, color: MioTheme.ink),
                         strong: const TextStyle(fontWeight: FontWeight.w800, color: MioTheme.ink),
                         code: const TextStyle(fontFamily: 'monospace', backgroundColor: MioTheme.cream2),
                       ),
-                    ),
+                    )),
             ),
           ),
           if (isUser) const SizedBox(width: 12),
           if (isUser) const Avatar(label: 'You', dark: true),
         ],
       ),
+    );
+  }
+}
+
+class _ThinkingAnimation extends StatefulWidget {
+  const _ThinkingAnimation();
+  @override
+  State<_ThinkingAnimation> createState() => _ThinkingAnimationState();
+}
+
+class _ThinkingAnimationState extends State<_ThinkingAnimation> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  int _wordIndex = 0;
+  final List<String> _words = ['Thinking', 'Searching', 'Analyzing', 'Synthesizing', 'Drafting', 'Refining'];
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
+    _startWordCycle();
+  }
+
+  void _startWordCycle() async {
+    while (mounted) {
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (mounted) {
+        setState(() {
+          _wordIndex = (_wordIndex + 1) % _words.length;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            final bounce = sin(_controller.value * pi * 2) * 4;
+            return Transform.translate(offset: Offset(0, bounce), child: child);
+          },
+          child: const BrandMark(size: 24),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          '${_words[_wordIndex]}…',
+          style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w600, color: MioTheme.muted, fontStyle: FontStyle.italic),
+        ),
+      ],
     );
   }
 }
