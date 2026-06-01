@@ -1194,6 +1194,95 @@ class AiProviderConfig {
   });
 }
 
+
+extension AiProviderConfigUiMetadata on AiProviderConfig {
+  String get logoAsset => _providerLogoForId(id);
+
+  Color get brandColor {
+    switch (id) {
+      case 'openai':
+        return const Color(0xFF10A37F);
+      case 'anthropic':
+        return const Color(0xFFCC785C);
+      case 'gemini':
+        return const Color(0xFF4285F4);
+      case 'deepseek':
+        return const Color(0xFF4D6BFE);
+      case 'groq':
+        return const Color(0xFFF97316);
+      case 'mistral':
+        return const Color(0xFFFF7000);
+      case 'openrouter':
+        return const Color(0xFF8B5CF6);
+      case 'ollama':
+        return const Color(0xFF111827);
+      default:
+        return MioTheme.orange;
+    }
+  }
+
+  String get tagline => '$model • Bring your own key';
+
+  String get helpText => id == 'ollama' || id == 'lmstudio'
+      ? 'Local providers may not require a cloud API key.'
+      : 'Stored securely on this device only.';
+}
+
+String _providerLogoForId(String id) {
+  switch (id) {
+    case 'openai':
+      return 'assets/icons/providers/openai.png';
+    case 'anthropic':
+      return 'assets/icons/providers/anthropic.png';
+    case 'gemini':
+      return 'assets/icons/providers/google.png';
+    case 'deepseek':
+      return 'assets/icons/providers/deepseek.png';
+    case 'groq':
+      return 'assets/icons/providers/groq.png';
+    case 'mistral':
+      return 'assets/icons/providers/mistral.png';
+    case 'openrouter':
+      return 'assets/icons/providers/openrouter.png';
+    case 'ollama':
+    case 'lmstudio':
+      return 'assets/icons/providers/ollama.png';
+    case 'cohere':
+      return 'assets/icons/providers/kimi.png';
+    default:
+      return 'assets/icons/providers/openrouter.png';
+  }
+}
+
+class _ProviderLogo extends StatelessWidget {
+  final String asset;
+  final String fallback;
+  final Color color;
+  final double size;
+
+  const _ProviderLogo({required this.asset, required this.fallback, required this.color, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * .28),
+      child: Image.asset(
+        asset,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(color: color.withOpacity(.14), borderRadius: BorderRadius.circular(size * .28)),
+          alignment: Alignment.center,
+          child: Text(fallback, style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: size * .42)),
+        ),
+      ),
+    );
+  }
+}
+
 const providers = <AiProviderConfig>[
   AiProviderConfig(id: 'openai', name: 'OpenAI', model: 'gpt-4o-mini', baseUrl: 'https://api.openai.com/v1/chat/completions', docsUrl: 'https://platform.openai.com/api-keys'),
   AiProviderConfig(id: 'anthropic', name: 'Anthropic', model: 'claude-3-5-sonnet-latest', baseUrl: 'https://api.anthropic.com/v1/messages', docsUrl: 'https://console.anthropic.com/settings/keys', openAiCompatible: false),
@@ -1314,6 +1403,7 @@ class AppController extends ChangeNotifier {
   bool zeroFluff = true;
   bool isStreaming = false;
   bool deepResearchMode = false;
+  bool webSearchEnabled = false;
   String error = '';
   String activeProject = 'Personal';
 
@@ -1347,6 +1437,7 @@ class AppController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     selectedProviderId = prefs.getString('provider') ?? selectedProviderId;
     zeroFluff = prefs.getBool('zeroFluff') ?? true;
+    webSearchEnabled = prefs.getBool('webSearchEnabled') ?? false;
     activeProject = prefs.getString('activeProject') ?? activeProject;
     final rawMessages = prefs.getStringList('messages') ?? [];
     messages = rawMessages.map((item) => ChatMessage.fromJson(jsonDecode(item) as Map<String, dynamic>)).toList();
@@ -1362,6 +1453,7 @@ class AppController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('provider', selectedProviderId);
     await prefs.setBool('zeroFluff', zeroFluff);
+    await prefs.setBool('webSearchEnabled', webSearchEnabled);
     await prefs.setString('activeProject', activeProject);
     await prefs.setStringList('messages', messages.map((m) => jsonEncode(m.toJson())).toList());
   }
@@ -1393,6 +1485,12 @@ class AppController extends ChangeNotifier {
 
   void toggleZeroFluff() {
     zeroFluff = !zeroFluff;
+    saveState();
+    notifyListeners();
+  }
+
+  void toggleWebSearch() {
+    webSearchEnabled = !webSearchEnabled;
     saveState();
     notifyListeners();
   }
@@ -1948,7 +2046,7 @@ class _ProviderPillState extends ConsumerState<ProviderPill> {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final button = context.findRenderObject() as RenderBox;
     final topLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
-    final left = (topLeft.dx + dx).clamp(8.0, max(8.0, overlay.size.width - width - 8));
+    final left = (topLeft.dx + dx).clamp(8.0, max(8.0, overlay.size.width - width - 8)).toDouble();
     final top = topLeft.dy + button.size.height + dy;
     return RelativeRect.fromLTRB(left, top, overlay.size.width - left - width, 0);
   }
@@ -2164,8 +2262,8 @@ class _ComposerState extends ConsumerState<Composer> {
     final button = buttonContext.findRenderObject() as RenderBox;
     final topLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
     final menuWidth = 260.0;
-    final left = topLeft.dx.clamp(8.0, max(8.0, overlay.size.width - menuWidth - 8));
-    final top = max(8.0, topLeft.dy - 350);
+    final left = topLeft.dx.clamp(8.0, max(8.0, overlay.size.width - menuWidth - 8)).toDouble();
+    final top = max(8.0, topLeft.dy - 350).toDouble();
     return RelativeRect.fromLTRB(left, top, overlay.size.width - left - menuWidth, 0);
   }
 
@@ -2516,9 +2614,9 @@ class RestoredSubscriptionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final plans = [
-      ('Free', '$0', 'Try Mio with BYOK basics', ['1 project', 'Local key storage', 'Starter usage']),
-      ('Pro', '$12', 'Best for individual power users', ['Unlimited BYOK providers', 'Projects and memory', 'Usage limits']),
-      ('Team', '$29', 'Shared workspace features', ['Team projects', 'Admin controls', 'Connector workflows']),
+      ('Free', r'$0', 'Try Mio with BYOK basics', ['1 project', 'Local key storage', 'Starter usage']),
+      ('Pro', r'$12', 'Best for individual power users', ['Unlimited BYOK providers', 'Projects and memory', 'Usage limits']),
+      ('Team', r'$29', 'Shared workspace features', ['Team projects', 'Admin controls', 'Connector workflows']),
     ];
     return RestoredScreenScaffold(
       title: 'Subscription',
