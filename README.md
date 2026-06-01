@@ -47,6 +47,18 @@ flutter run -d macos \
 
 Run `supabase_schema.sql` in your Supabase SQL editor. The schema stores projects, chats, messages, and provider metadata. It does **not** store API keys.
 
+## Credential TODOs
+
+| Area | Needed before live use |
+| --- | --- |
+| Supabase | `SUPABASE_URL` and `SUPABASE_ANON_KEY` for auth, database, and optional encrypted sync. |
+| Google Login | Google OAuth client ID/secret, consent screen, and Supabase redirect URL setup. |
+| Apple Login | Apple Services ID, Team ID, Key ID, private key, and Supabase redirect URL setup. |
+| Notion Connector | Notion integration token or OAuth app credentials. |
+| Gmail Connector | Google OAuth setup with Gmail API access and approved scopes. |
+
+The current startup/onboarding flow has **two pre-chat screens**: Splash and Welcome/Login. The router has **three total app routes**: `/`, `/welcome`, and `/chat`.
+
 ## Security rule
 
 Provider keys are stored locally with `flutter_secure_storage`. They should not be logged, synced, or sent to a custom backend. The app calls providers directly from the client.
