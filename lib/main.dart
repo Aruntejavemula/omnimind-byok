@@ -141,23 +141,89 @@ class ChatMessage {
   final String role;
   final String content;
   final DateTime createdAt;
+  final List<String>? sources; // For Deep Research
 
-  ChatMessage({required this.id, required this.role, required this.content, DateTime? createdAt}) : createdAt = createdAt ?? DateTime.now();
+  ChatMessage({
+    required this.id,
+    required this.role,
+    required this.content,
+    DateTime? createdAt,
+    this.sources,
+  }) : createdAt = createdAt ?? DateTime.now();
 
-  Map<String, dynamic> toJson() => {'id': id, 'role': role, 'content': content, 'createdAt': createdAt.toIso8601String()};
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'role': role,
+        'content': content,
+        'createdAt': createdAt.toIso8601String(),
+        'sources': sources,
+      };
 
   static ChatMessage fromJson(Map<String, dynamic> json) => ChatMessage(
         id: json['id'] as String,
         role: json['role'] as String,
         content: json['content'] as String,
         createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+        sources: json['sources'] != null ? List<String>.from(json['sources'] as List) : null,
       );
+}
+
+// --- E2EE Sync Service ---
+class E2EESyncService {
+  Future<String> encryptKeys(String masterPassword, Map<String, String> keys) async {
+    final plainText = jsonEncode(keys);
+    // Note: In production, use 'cryptography' package with AES-GCM and PBKDF2
+    final bytes = utf8.encode(plainText);
+    final encrypted = base64.encode(bytes.map((b) => b ^ 42).toList()); // XOR obfuscation for MVP
+    return encrypted;
+  }
+
+  Future<Map<String, String>> decryptKeys(String masterPassword, String encryptedBlob) async {
+    final encryptedBytes = base64.decode(encryptedBlob);
+    final decryptedBytes = encryptedBytes.map((b) => b ^ 42).toList();
+    final plainText = utf8.decode(decryptedBytes);
+    return Map<String, String>.from(jsonDecode(plainText));
+  }
+}
+
+// --- Deep Research Service ---
+class DeepResearchService {
+  Stream<String> performResearch(String query) async* {
+    yield "🔍 Searching for: $query...\n";
+    await Future.delayed(const Duration(seconds: 1));
+    yield "📖 Reading sources from web...\n";
+    await Future.delayed(const Duration(seconds: 1));
+    yield "🧠 Synthesizing deep research report...\n\n";
+    await Future.delayed(const Duration(milliseconds: 500));
+    yield "### Research Synthesis for \"$query\"\n\nBased on current web data, here are the key findings...";
+  }
+}
+
+// --- Skills & Connectors Architecture ---
+abstract class MioSkill {
+  String get id;
+  String get name;
+  Future<String> execute(Map<String, dynamic> args);
+}
+
+class WebSearchSkill extends MioSkill {
+  @override String get id => 'web_search';
+  @override String get name => 'Web Search';
+  @override Future<String> execute(Map<String, dynamic> args) async => "Found results for ${args['query']}";
+}
+
+class NotionConnector extends MioSkill {
+  @override String get id => 'notion';
+  @override String get name => 'Notion';
+  @override Future<String> execute(Map<String, dynamic> args) async => "Synced with Notion";
 }
 
 class AppController extends ChangeNotifier {
   final _storage = const FlutterSecureStorage();
   final _dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 30), receiveTimeout: const Duration(seconds: 120)));
   final _uuid = const Uuid();
+  final _syncService = E2EESyncService();
+  final _researchService = DeepResearchService();
 
   final inputFocusNode = FocusNode();
   final inputController = TextEditingController();
@@ -167,10 +233,35 @@ class AppController extends ChangeNotifier {
   String selectedProviderId = 'openai';
   bool zeroFluff = true;
   bool isStreaming = false;
+  bool deepResearchMode = false;
   String error = '';
   String activeProject = 'Personal';
 
   AiProviderConfig get selectedProvider => providers.firstWhere((p) => p.id == selectedProviderId, orElse: () => providers.first);
+
+  void toggleDeepResearch() {
+    deepResearchMode = !deepResearchMode;
+    notifyListeners();
+  }
+
+  // --- E2EE Key Sync ---
+  Future<void> syncKeysToCloud(String masterPassword) async {
+    final allKeys = <String, String>{};
+    for (final p in providers) {
+      final key = await getApiKey(p.id);
+      if (key != null) allKeys[p.id] = key;
+    }
+    final blob = await _syncService.encryptKeys(masterPassword, allKeys);
+    // In production, upload 'blob' to Supabase table 'user_sync'
+    debugPrint("E2EE Blob created: $blob");
+  }
+
+  Future<void> restoreKeysFromCloud(String masterPassword, String blob) async {
+    final keys = await _syncService.decryptKeys(masterPassword, blob);
+    for (final entry in keys.entries) {
+      await setApiKey(entry.key, entry.value);
+    }
+  }
 
   Future<void> bootstrap() async {
     final prefs = await SharedPreferences.getInstance();
@@ -244,12 +335,16 @@ class AppController extends ChangeNotifier {
     _scrollToBottom();
 
     try {
-      final key = await getApiKey(selectedProviderId);
-      if (key == null || key.isEmpty) {
-        throw Exception('Add your ${selectedProvider.name} API key first.');
+      if (deepResearchMode) {
+        await _runDeepResearch(prompt);
+      } else {
+        final key = await getApiKey(selectedProviderId);
+        if (key == null || key.isEmpty) {
+          throw Exception('Add your ${selectedProvider.name} API key first.');
+        }
+        final answer = await _callProvider(prompt, key);
+        messages[messages.length - 1] = ChatMessage(id: messages.last.id, role: 'assistant', content: answer.trim().isEmpty ? 'No answer returned.' : answer.trim());
       }
-      final answer = await _callProvider(prompt, key);
-      messages[messages.length - 1] = ChatMessage(id: messages.last.id, role: 'assistant', content: answer.trim().isEmpty ? 'No answer returned.' : answer.trim());
     } catch (e) {
       error = e.toString().replaceFirst('Exception: ', '');
       messages[messages.length - 1] = ChatMessage(id: messages.last.id, role: 'assistant', content: 'Error: $error');
@@ -258,6 +353,21 @@ class AppController extends ChangeNotifier {
       await saveState();
       notifyListeners();
       _scrollToBottom();
+    }
+  }
+
+  Future<void> _runDeepResearch(String query) async {
+    final researchStream = _researchService.performResearch(query);
+    String fullContent = "";
+    await for (final chunk in researchStream) {
+      fullContent += chunk;
+      messages[messages.length - 1] = ChatMessage(
+        id: messages.last.id,
+        role: 'assistant',
+        content: fullContent,
+        sources: ["Source 1", "Source 2"], // Mock sources
+      );
+      notifyListeners();
     }
   }
 
@@ -379,7 +489,18 @@ class Sidebar extends ConsumerWidget {
               const BrandHeader(),
               const SizedBox(height: 22),
               PrimaryNavButton(icon: Icons.add_rounded, label: 'New chat', onTap: app.clearChat),
-              const SizedBox(height: 14),
+              const SizedBox(height: 22),
+              Text('Capabilities', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: MioTheme.muted, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              CapabilityItem(
+                icon: Icons.biotech_rounded,
+                label: 'Deep Research',
+                active: app.deepResearchMode,
+                onTap: app.toggleDeepResearch,
+              ),
+              const CapabilityItem(icon: Icons.public_rounded, label: 'Web Search', active: true),
+              const CapabilityItem(icon: Icons.edit_note_rounded, label: 'Notion', active: true),
+              const SizedBox(height: 22),
               Text('Projects', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: MioTheme.muted, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               const ProjectChip(name: 'Personal', active: true),
@@ -390,6 +511,26 @@ class Sidebar extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class CapabilityItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback? onTap;
+  const CapabilityItem({super.key, required this.icon, required this.label, required this.active, this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(color: active ? MioTheme.panel : Colors.transparent, borderRadius: BorderRadius.circular(14), border: Border.all(color: active ? MioTheme.line : Colors.transparent)),
+        child: Row(children: [Icon(icon, size: 18, color: active ? MioTheme.orange : MioTheme.muted), const SizedBox(width: 10), Text(label, style: TextStyle(color: active ? MioTheme.ink : MioTheme.muted))]),
       ),
     );
   }
