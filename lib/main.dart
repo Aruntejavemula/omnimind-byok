@@ -1284,9 +1284,9 @@ class _ProviderLogo extends StatelessWidget {
 }
 
 const providers = <AiProviderConfig>[
-  AiProviderConfig(id: 'openai', name: 'OpenAI', model: 'gpt-4o-mini', baseUrl: 'https://api.openai.com/v1/chat/completions', docsUrl: 'https://platform.openai.com/api-keys'),
-  AiProviderConfig(id: 'anthropic', name: 'Anthropic', model: 'claude-3-5-sonnet-latest', baseUrl: 'https://api.anthropic.com/v1/messages', docsUrl: 'https://console.anthropic.com/settings/keys', openAiCompatible: false),
-  AiProviderConfig(id: 'gemini', name: 'Gemini', model: 'gemini-1.5-flash', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models', docsUrl: 'https://aistudio.google.com/app/apikey', openAiCompatible: false),
+  AiProviderConfig(id: 'openai', name: 'OpenAI', model: 'gpt-4o', baseUrl: 'https://api.openai.com/v1/chat/completions', docsUrl: 'https://platform.openai.com/api-keys'),
+  AiProviderConfig(id: 'anthropic', name: 'Anthropic', model: 'claude-4-6-sonnet-latest', baseUrl: 'https://api.anthropic.com/v1/messages', docsUrl: 'https://console.anthropic.com/settings/keys', openAiCompatible: false),
+  AiProviderConfig(id: 'gemini', name: 'Gemini', model: 'gemini-3-5-pro', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models', docsUrl: 'https://aistudio.google.com/app/apikey', openAiCompatible: false),
   AiProviderConfig(id: 'deepseek', name: 'DeepSeek', model: 'deepseek-chat', baseUrl: 'https://api.deepseek.com/chat/completions', docsUrl: 'https://platform.deepseek.com/api_keys'),
   AiProviderConfig(id: 'groq', name: 'Groq', model: 'llama-3.1-70b-versatile', baseUrl: 'https://api.groq.com/openai/v1/chat/completions', docsUrl: 'https://console.groq.com/keys'),
   AiProviderConfig(id: 'mistral', name: 'Mistral', model: 'mistral-small-latest', baseUrl: 'https://api.mistral.ai/v1/chat/completions', docsUrl: 'https://console.mistral.ai/api-keys'),
@@ -2039,8 +2039,6 @@ class TopBar extends ConsumerWidget {
           ZeroFluffToggle(value: app.zeroFluff, onTap: app.toggleZeroFluff),
           const SizedBox(width: 12),
           ProviderPill(provider: app.selectedProvider),
-          const SizedBox(width: 10),
-          SettingsButton(),
         ],
       ),
     );
@@ -2475,6 +2473,8 @@ class _ComposerState extends ConsumerState<Composer> {
             Expanded(child: TextField(controller: app.inputController, focusNode: app.inputFocusNode, minLines: 1, maxLines: 6, textInputAction: TextInputAction.newline, decoration: const InputDecoration(hintText: 'Ask anything…', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 13)), onSubmitted: (_) => app.sendPrompt())),
             if (app.error.isNotEmpty) Tooltip(message: app.error, child: const Icon(Icons.warning_rounded, color: MioTheme.orange)),
             const SizedBox(width: 6),
+            IconButton(onPressed: () => context.go('/settings/api-keys'), icon: const Icon(Icons.key_rounded), tooltip: 'API Keys'),
+            const SizedBox(width: 6),
             FilledButton(style: FilledButton.styleFrom(backgroundColor: MioTheme.orange, foregroundColor: Colors.white, shape: const CircleBorder(), padding: const EdgeInsets.all(14)), onPressed: app.isStreaming ? null : app.sendPrompt, child: app.isStreaming ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.arrow_upward_rounded)),
           ]),
         ),
@@ -2687,21 +2687,54 @@ class RestoredPreferencesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appControllerProvider);
-    return RestoredScreenScaffold(
-      title: 'Preferences',
-      section: 'Settings',
-      description: 'Conversation and privacy preferences restored from the full settings experience.',
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        RestoredHeroPanel(icon: Icons.tune_rounded, title: 'Preferences', body: 'Control Mio response style, provider defaults, privacy behavior, and workspace feel.'),
-        const SizedBox(height: 18),
-        RestoredSectionCard(title: 'Conversation style', children: [
-          SwitchListTile(value: app.zeroFluff, onChanged: (_) => app.toggleZeroFluff(), title: const Text('Zero Fluff'), subtitle: const Text('Direct answers with less filler.')),
-          SwitchListTile(value: app.deepResearchMode, onChanged: (_) => app.toggleDeepResearch(), title: const Text('Deep Research'), subtitle: const Text('Use broader search and synthesis when available.')),
-          SwitchListTile(value: app.webSearchEnabled, onChanged: (_) => app.toggleWebSearch(), title: const Text('Web Search'), subtitle: const Text('Allow web-assisted responses when needed.')),
-        ]),
-        const SizedBox(height: 18),
-        RestoredSectionCard(title: 'Default provider', children: providers.map((p) => RadioListTile<String>(value: p.id, groupValue: app.selectedProviderId, onChanged: (v) => v == null ? null : app.chooseProvider(v), title: Text(p.name), subtitle: Text(p.tagline))).toList()),
-      ]),
+    return Scaffold(
+      backgroundColor: MioTheme.cream,
+      appBar: AppBar(
+        backgroundColor: MioTheme.cream,
+        elevation: 0,
+        title: const Text('Preferences', style: TextStyle(fontWeight: FontWeight.w900)),
+        leading: IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: () => context.canPop() ? context.pop() : context.go('/chat')),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                Text('RESPONSE STYLE', style: const TextStyle(color: MioTheme.orange, fontWeight: FontWeight.w900, letterSpacing: .8, fontSize: 12)),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: MioTheme.line)),
+                  child: Column(
+                    children: [
+                      SwitchListTile(value: app.zeroFluff, onChanged: (_) => app.toggleZeroFluff(), title: const Text('Zero Fluff'), subtitle: const Text('Direct answers with less filler.')),
+                      const Divider(),
+                      SwitchListTile(value: app.deepResearchMode, onChanged: (_) => app.toggleDeepResearch(), title: const Text('Deep Research'), subtitle: const Text('Use broader search and synthesis when available.')),
+                      const Divider(),
+                      SwitchListTile(value: app.webSearchEnabled, onChanged: (_) => app.toggleWebSearch(), title: const Text('Web Search'), subtitle: const Text('Allow web-assisted responses when needed.')),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text('DEFAULT PROVIDER', style: const TextStyle(color: MioTheme.orange, fontWeight: FontWeight.w900, letterSpacing: .8, fontSize: 12)),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: MioTheme.line)),
+                  child: Column(
+                    children: providers.map((p) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: RadioListTile<String>(value: p.id, groupValue: app.selectedProviderId, onChanged: (v) => v == null ? null : app.chooseProvider(v), title: Text(p.name), subtitle: Text(p.model)),
+                    )).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
