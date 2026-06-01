@@ -2817,6 +2817,135 @@ class RestoredSubscriptionScreen extends StatelessWidget {
   const RestoredSubscriptionScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: MioTheme.cream,
+      appBar: AppBar(
+        backgroundColor: MioTheme.cream,
+        elevation: 0,
+        title: const Text('Subscription', style: TextStyle(fontWeight: FontWeight.w900)),
+        leading: IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: () => context.canPop() ? context.pop() : context.go('/chat')),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                Text('CHOOSE YOUR PLAN', style: const TextStyle(color: MioTheme.orange, fontWeight: FontWeight.w900, letterSpacing: .8, fontSize: 12)),
+                const SizedBox(height: 8),
+                const Text('14-day free trial. No credit card required.', style: TextStyle(color: MioTheme.muted, fontSize: 14)),
+                const SizedBox(height: 24),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact = constraints.maxWidth < 600;
+                    return Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: [
+                        _PlanCard(name: 'Free', monthlyPrice: '0', yearlyPrice: null, description: 'Perfect for getting started', features: ['1 project', 'Local key storage', 'Basic usage'], isPopular: false, onTap: () {}),
+                        _PlanCard(name: 'Pro', monthlyPrice: '4.99', yearlyPrice: '49.99', description: 'Best for power users', features: ['Unlimited projects', 'All BYOK providers', 'Advanced usage tracking', 'Priority support'], isPopular: true, onTap: () {}),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 32),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: MioTheme.line)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Billing Details', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Current Plan', style: TextStyle(color: MioTheme.muted)),
+                          const Text('Free (Trial)', style: TextStyle(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Trial Ends', style: TextStyle(color: MioTheme.muted)),
+                          Text(DateTime.now().add(const Duration(days: 14)).toString().split(' ')[0], style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanCard extends StatelessWidget {
+  final String name;
+  final String monthlyPrice;
+  final String? yearlyPrice;
+  final String description;
+  final List<String> features;
+  final bool isPopular;
+  final VoidCallback onTap;
+
+  const _PlanCard({
+    required this.name,
+    required this.monthlyPrice,
+    this.yearlyPrice,
+    required this.description,
+    required this.features,
+    required this.isPopular,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 300,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: MioTheme.panel,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isPopular ? MioTheme.orange : MioTheme.line, width: isPopular ? 2 : 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (isPopular) Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.12), borderRadius: BorderRadius.circular(8)), child: const Text('Most Popular', style: TextStyle(color: MioTheme.orange, fontSize: 12, fontWeight: FontWeight.w700))),
+          if (isPopular) const SizedBox(height: 12),
+          Text(name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Text(description, style: const TextStyle(color: MioTheme.muted, fontSize: 14)),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text('\$$monthlyPrice', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900)),
+              const SizedBox(width: 4),
+              const Text('/month', style: TextStyle(color: MioTheme.muted, fontSize: 14)),
+            ],
+          ),
+          if (yearlyPrice != null) ...[const SizedBox(height: 8), Text('or \$$yearlyPrice/year', style: const TextStyle(color: MioTheme.muted, fontSize: 13))],
+          const SizedBox(height: 20),
+          FilledButton(onPressed: onTap, style: FilledButton.styleFrom(backgroundColor: isPopular ? MioTheme.orange : MioTheme.ink, minimumSize: const Size(double.infinity, 44)), child: Text(name == 'Free' ? 'Current Plan' : 'Upgrade Now')),
+          const SizedBox(height: 20),
+          ...features.map((f) => Padding(padding: const EdgeInsets.only(bottom: 10), child: Row(children: [const Icon(Icons.check_circle_rounded, color: MioTheme.orange, size: 18), const SizedBox(width: 10), Expanded(child: Text(f, style: const TextStyle(fontSize: 14)))]))),
+        ],
+      ),
+    );
+  }
+}
+
+class _OldRestoredScreenScaffold extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
     final plans = [
       ('Free', r'$0', 'Try Mio with BYOK basics', ['1 project', 'Local key storage', 'Starter usage']),
       ('Pro', r'$12', 'Best for individual power users', ['Unlimited BYOK providers', 'Projects and memory', 'Usage limits']),
