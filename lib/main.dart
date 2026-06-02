@@ -2263,6 +2263,26 @@ class StatusCard extends StatelessWidget {
   }
 }
 
+class ProjectsView extends StatelessWidget {
+  const ProjectsView({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.folder_open_rounded, size: 64, color: MioTheme.muted.withOpacity(.5)),
+          const SizedBox(height: 16),
+          const Text('Projects', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          const Text('Manage your projects here', style: TextStyle(color: MioTheme.muted)),
+        ],
+      ),
+    );
+  }
+}
+
 class ChatWorkspace extends ConsumerWidget {
   final bool compact;
   const ChatWorkspace({super.key, required this.compact});
@@ -2275,20 +2295,54 @@ class ChatWorkspace extends ConsumerWidget {
         children: [
           TopBar(compact: compact),
           Expanded(
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 980),
-              child: ListView.builder(
-                controller: app.scrollController,
-                padding: EdgeInsets.fromLTRB(compact ? 18 : 42, 18, compact ? 18 : 42, 18),
-                itemCount: app.messages.length,
-                itemBuilder: (context, index) => MessageTile(message: app.messages[index]),
-              ),
-            ),
+            child: _buildTabContent(app.currentSidebarTab, app, compact),
           ),
-          const Composer(),
         ],
       ),
     );
+  }
+  
+  Widget _buildTabContent(String tab, AppController app, bool compact) {
+    switch (tab) {
+      case 'chat':
+        return Column(
+          children: [
+            Expanded(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 980),
+                child: ListView.builder(
+                  controller: app.scrollController,
+                  padding: EdgeInsets.fromLTRB(compact ? 18 : 42, 18, compact ? 18 : 42, 18),
+                  itemCount: app.messages.length,
+                  itemBuilder: (context, index) => MessageTile(message: app.messages[index]),
+                ),
+              ),
+            ),
+            const Composer(),
+          ],
+        );
+      case 'projects':
+        return ProjectsView();
+      case 'code':
+        return CodeModeScreen();
+      default:
+        return Column(
+          children: [
+            Expanded(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 980),
+                child: ListView.builder(
+                  controller: app.scrollController,
+                  padding: EdgeInsets.fromLTRB(compact ? 18 : 42, 18, compact ? 18 : 42, 18),
+                  itemCount: app.messages.length,
+                  itemBuilder: (context, index) => MessageTile(message: app.messages[index]),
+                ),
+              ),
+            ),
+            const Composer(),
+          ],
+        );
+    }
   }
 }
 
