@@ -20,7 +20,7 @@ import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uuid/uuid.dart';
+import 'package:uuid/uuid.dart';\nimport 'package:webview_flutter/webview_flutter.dart';
 
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
@@ -1420,7 +1420,12 @@ class AppController extends ChangeNotifier {
   String error = '';
   String activeProject = 'Personal';
 
-  AiProviderConfig get selectedProvider => providers.firstWhere((p) => p.id == selectedProviderId, orElse: () => providers.first);
+    String currentSidebarTab = "chat";
+  String currentProjectId = "personal";
+  Map<String, String> projectMemory = {};
+  List<String> recentChats = [];
+  
+AiProviderConfig get selectedProvider => providers.firstWhere((p) => p.id == selectedProviderId, orElse: () => providers.first);
 
   void toggleDeepResearch() {
     deepResearchMode = !deepResearchMode;
@@ -2016,7 +2021,7 @@ class Sidebar extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.leaf_rounded, size: 16, color: Color(0xFF4CAF50)),
+                        const Icon(Icons.eco_rounded, size: 16, color: Color(0xFF4CAF50)),
                         const SizedBox(width: 8),
                         const Expanded(child: Text('Relaunch to update', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
                         Icon(Icons.arrow_forward_rounded, size: 14, color: MioTheme.muted.withOpacity(.5)),
@@ -2680,6 +2685,7 @@ class _ModelPickerButton extends StatelessWidget {
       case 'mistral':
         return ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest'];
       default:
+        final provider = providers.firstWhere((p) => p.id == providerId, orElse: () => providers.first);
         return [provider.model];
     }
   }
