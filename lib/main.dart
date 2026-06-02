@@ -1984,7 +1984,7 @@ class Sidebar extends ConsumerWidget {
                 child: Row(
                   children: [
                     _TabButton(label: 'Chat', icon: Icons.chat_bubble_outline_rounded, isActive: currentTab == 'chat', onTap: () => app.setSidebarTab('chat')),
-                    _TabButton(label: 'Cowork', icon: Icons. people_outline_rounded, isActive: currentTab == 'cowork', onTap: () => app.setSidebarTab('cowork')),
+                    _TabButton(label: 'Projects', icon: Icons.folder_open_rounded, isActive: currentTab == 'cowork', onTap: () => app.setSidebarTab('cowork')),
                     _TabButton(label: 'Code', icon: Icons.code_rounded, isActive: currentTab == 'code', onTap: () => app.setSidebarTab('code')),
                   ],
                 ),
@@ -1999,7 +1999,6 @@ class Sidebar extends ConsumerWidget {
                   _SidebarMenuItem(icon: Icons.add_rounded, label: 'New chat', onTap: () => context.go('/chat')),
                   _SidebarMenuItem(icon: Icons.folder_open_rounded, label: 'Projects', onTap: () => context.go('/projects')),
                   _SidebarMenuItem(icon: Icons.layers_outlined, label: 'Artifacts', onTap: () => context.go('/artifacts')),
-                  _SidebarMenuItem(icon: Icons.tune_rounded, label: 'Customize', onTap: () => context.go('/settings/preferences')),
                   
                   const SizedBox(height: 24),
                   const Padding(
@@ -2011,30 +2010,7 @@ class Sidebar extends ConsumerWidget {
               ),
             ),
             
-            // Relaunch Banner
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: const Color(0xFFFFF6ED), borderRadius: BorderRadius.circular(12), border: Border.all(color: MioTheme.orange.withOpacity(.2))),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.eco_rounded, size: 16, color: Color(0xFF4CAF50)),
-                        const SizedBox(width: 8),
-                        const Expanded(child: Text('Relaunch to update', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
-                        Icon(Icons.arrow_forward_rounded, size: 14, color: MioTheme.muted.withOpacity(.5)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text('v1.9659.2', style: TextStyle(fontSize: 11, color: MioTheme.muted)),
-                  ],
-                ),
-              ),
-            ),
-            
+
             // Profile Footer
             Padding(
               padding: const EdgeInsets.all(12),
