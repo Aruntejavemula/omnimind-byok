@@ -1961,29 +1961,132 @@ class Sidebar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appControllerProvider);
+    final currentTab = app.currentSidebarTab;
+    
     return Container(
-      width: 72,
-      decoration: const BoxDecoration(color: MioTheme.cream2, border: Border(right: BorderSide(color: MioTheme.line))),
+      width: 280,
+      decoration: BoxDecoration(color: MioTheme.cream, border: const Border(right: BorderSide(color: MioTheme.line))),
       child: SafeArea(
         child: Column(
           children: [
+            // Top Tab Switcher
             Padding(
               padding: const EdgeInsets.all(12),
               child: Container(
-                width: 48,
-                height: 48,
+                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(color: MioTheme.panel, borderRadius: BorderRadius.circular(12), border: Border.all(color: MioTheme.line)),
-                child: const Center(child: BrandMark(size: 32)),
+                child: Row(
+                  children: [
+                    _TabButton(label: 'Chat', icon: Icons.chat_bubble_outline_rounded, isActive: currentTab == 'chat', onTap: () => app.setSidebarTab('chat')),
+                    _TabButton(label: 'Cowork', icon: Icons. people_outline_rounded, isActive: currentTab == 'cowork', onTap: () => app.setSidebarTab('cowork')),
+                    _TabButton(label: 'Code', icon: Icons.code_rounded, isActive: currentTab == 'code', onTap: () => app.setSidebarTab('code')),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 16),
-            _SidebarIconButton(icon: Icons.chat_rounded, label: 'Chat', onTap: () => context.go('/chat')),
-            const SizedBox(height: 12),
-            _SidebarIconButton(icon: Icons.work_rounded, label: 'Projects', onTap: () => context.go('/projects')),
-            const SizedBox(height: 12),
-            _SidebarIconButton(icon: Icons.settings_rounded, label: 'Settings', onTap: () => context.go('/settings')),
-            const Spacer(),
-            _UserProfileButton(app: app),
+            
+            // Menu items
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: [
+                  _SidebarMenuItem(icon: Icons.add_rounded, label: 'New chat', onTap: () => context.go('/chat')),
+                  _SidebarMenuItem(icon: Icons.folder_open_rounded, label: 'Projects', onTap: () => context.go('/projects')),
+                  _SidebarMenuItem(icon: Icons.layers_outlined, label: 'Artifacts', onTap: () => context.go('/artifacts')),
+                  _SidebarMenuItem(icon: Icons.tune_rounded, label: 'Customize', onTap: () => context.go('/settings/preferences')),
+                  
+                  const SizedBox(height: 24),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text('RECENTS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: MioTheme.muted, letterSpacing: 1.1)),
+                  ),
+                  ...(app.recentChats.isEmpty ? ['No recent chats'] : app.recentChats).map((chat) => _SidebarMenuItem(icon: Icons.chat_bubble_outline_rounded, label: chat, onTap: () {}, small: true)),
+                ],
+              ),
+            ),
+            
+            // Relaunch Banner
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: const Color(0xFFFFF6ED), borderRadius: BorderRadius.circular(12), border: Border.all(color: MioTheme.orange.withOpacity(.2))),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.leaf_rounded, size: 16, color: Color(0xFF4CAF50)),
+                        const SizedBox(width: 8),
+                        const Expanded(child: Text('Relaunch to update', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
+                        Icon(Icons.arrow_forward_rounded, size: 14, color: MioTheme.muted.withOpacity(.5)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text('v1.9659.2', style: TextStyle(fontSize: 11, color: MioTheme.muted)),
+                  ],
+                ),
+              ),
+            ),
+            
+            // Profile Footer
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: _UserProfileButton(app: app),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TabButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isActive;
+  final VoidCallback onTap;
+  const _TabButton({required this.label, required this.icon, required this.isActive, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(color: isActive ? MioTheme.cream : Colors.transparent, borderRadius: BorderRadius.circular(8), boxShadow: isActive ? [BoxShadow(color: Colors.black.withOpacity(.05), blurRadius: 4, offset: const Offset(0, 2))] : null),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14, color: isActive ? MioTheme.ink : MioTheme.muted),
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(fontSize: 12, fontWeight: isActive ? FontWeight.w700 : FontWeight.w500, color: isActive ? MioTheme.ink : MioTheme.muted)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool small;
+  const _SidebarMenuItem({required this.icon, required this.label, required this.onTap, this.small = false});
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: small ? 8 : 12),
+        child: Row(
+          children: [
+            Icon(icon, size: small ? 16 : 20, color: MioTheme.muted),
+            const SizedBox(width: 12),
+            Expanded(child: Text(label, style: TextStyle(fontSize: small ? 13 : 14, color: MioTheme.ink, fontWeight: small ? FontWeight.w400 : FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis)),
           ],
         ),
       ),
@@ -2028,7 +2131,7 @@ class _UserProfileButtonState extends ConsumerState<_UserProfileButton> {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final button = context.findRenderObject() as RenderBox;
     final topLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
-    _menuPosition = RelativeRect.fromLTRB(topLeft.dx + button.size.width + 8, topLeft.dy, overlay.size.width - topLeft.dx - button.size.width - 8, overlay.size.height - topLeft.dy - button.size.height);
+    _menuPosition = RelativeRect.fromLTRB(topLeft.dx + 280 + 8, topLeft.dy, overlay.size.width - topLeft.dx - button.size.width - 8, overlay.size.height - topLeft.dy - button.size.height);
 
     showMenu<String>(
       context: context,
