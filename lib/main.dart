@@ -1801,16 +1801,15 @@ class _CodeModeScreenState extends ConsumerState<CodeModeScreen> {
 
   void _executeCode() {
     final code = _codeController.text;
-    // Simple validation for HTML/CSS/JS
     if (code.isEmpty) {
       setState(() => _errors = 'Code is empty');
       return;
     }
     
     try {
-      // For now, just use the code as-is for preview
+      final wrappedCode = '<html><head><style>body{font-family:Arial;margin:0;padding:20px;}.error{color:#cc5801;background:#fff6ed;padding:10px;border-radius:4px;margin:10px 0;}.log{color:#666;background:#f5f5f5;padding:8px;margin:5px 0;font-family:monospace;font-size:12px;}</style></head><body><script>var logs=[];var originalLog=console.log;var originalError=console.error;console.log=function(...args){logs.push("LOG: "+args.join(" "));originalLog.apply(console,args);};console.error=function(...args){logs.push("ERROR: "+args.join(" "));originalError.apply(console,args);};window.onerror=function(msg,url,line){logs.push("ERROR: "+msg+" at line "+line);return false;};try{' + code + '}catch(e){logs.push("EXCEPTION: "+e.toString());document.body.innerHTML="<div class=\\"error\\"><strong>Error:</strong> "+e.toString()+"</div>"+document.body.innerHTML;}if(logs.length>0){var logsDiv=document.createElement("div");logsDiv.style.marginTop="20px";logsDiv.style.borderTop="1px solid #ddd";logsDiv.style.paddingTop="10px";logsDiv.innerHTML="<strong>Console Output:</strong>";logs.forEach(function(log){var logDiv=document.createElement("div");logDiv.className="log";logDiv.textContent=log;logsDiv.appendChild(logDiv);});document.body.appendChild(logsDiv);}</script></body></html>';
       setState(() {
-        _previewHtml = code;
+        _previewHtml = wrappedCode;
         _errors = '';
       });
     } catch (e) {
@@ -1836,6 +1835,8 @@ class _CodeModeScreenState extends ConsumerState<CodeModeScreen> {
                       const Text('Code Editor', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                       const Spacer(),
                       FilledButton.icon(onPressed: _executeCode, icon: const Icon(Icons.play_arrow_rounded), label: const Text('Run'), style: FilledButton.styleFrom(backgroundColor: MioTheme.orange)),
+                      const SizedBox(width: 8),
+                      FilledButton.icon(onPressed: () => _codeController.clear(), icon: const Icon(Icons.delete_rounded), label: const Text('Clear'), style: FilledButton.styleFrom(backgroundColor: Colors.grey)),
                     ],
                   ),
                 ),
@@ -1847,7 +1848,7 @@ class _CodeModeScreenState extends ConsumerState<CodeModeScreen> {
                       controller: _codeController,
                       maxLines: null,
                       expands: true,
-                      style: const TextStyle(color: Colors.white, fontFamily: 'Courier', fontSize: 12),
+                      style: const TextStyle(color: Color(0xFF00FF00), fontFamily: 'Courier', fontSize: 12),
                       decoration: const InputDecoration(
                         hintText: 'Write your HTML/CSS/JS here...',
                         hintStyle: TextStyle(color: Color(0xFF666666)),
@@ -1862,7 +1863,13 @@ class _CodeModeScreenState extends ConsumerState<CodeModeScreen> {
                     padding: const EdgeInsets.all(12),
                     margin: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: MioTheme.orange.withOpacity(.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: MioTheme.orange)),
-                    child: Text(_errors, style: const TextStyle(color: MioTheme.orange, fontSize: 12)),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_rounded, color: MioTheme.orange, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(_errors, style: const TextStyle(color: MioTheme.orange, fontSize: 12))),
+                      ],
+                    ),
                   ),
               ],
             ),
@@ -1880,7 +1887,7 @@ class _CodeModeScreenState extends ConsumerState<CodeModeScreen> {
                   padding: const EdgeInsets.all(12),
                   child: Row(
                     children: [
-                      const Text('Preview', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      const Text('Live Preview', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                       const Spacer(),
                       IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _executeCode, tooltip: 'Refresh'),
                     ],
@@ -1890,9 +1897,7 @@ class _CodeModeScreenState extends ConsumerState<CodeModeScreen> {
                   child: Container(
                     margin: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: MioTheme.line)),
-                    child: SingleChildScrollView(
-                      child: Html(data: _previewHtml),
-                    ),
+                    child: HtmlPreview(html: _previewHtml),
                   ),
                 ),
               ],
@@ -1904,15 +1909,16 @@ class _CodeModeScreenState extends ConsumerState<CodeModeScreen> {
   }
 }
 
-class Html extends StatelessWidget {
-  final String data;
-  const Html({super.key, required this.data});
+class HtmlPreview extends StatelessWidget {
+  final String html;
+  const HtmlPreview({super.key, required this.html});
   
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Text(data, style: const TextStyle(fontFamily: 'Courier', fontSize: 12)),
+    return WebViewWidget(
+      controller: WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..loadHtmlString(html),
     );
   }
 }
