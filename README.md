@@ -1,41 +1,131 @@
-# Mio / Omnimind BYOK
+# OmniMind BYOK
 
-A premium **Bring Your Own Key** AI chat app rebuilt with Flutter. The MVP is desktop-first, uses a cream/light-grey and Persian-orange visual system, stores provider keys locally with secure device storage, and can optionally connect to Supabase for auth and sync.
+[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter)](https://flutter.dev)
+[![Dart](https://img.shields.io/badge/Dart-3.8-0175C2?logo=dart)](https://dart.dev)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python)](https://python.org)
+[![Supabase](https://img.shields.io/badge/Supabase-optional-3ECF8E?logo=supabase)](https://supabase.com)
+[![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web%20%7C%20iOS%20%7C%20Android-lightgrey)](https://flutter.dev/multi-platform)
 
-## What this rebuild keeps
+A premium **Bring Your Own Key** AI chat application built with Flutter. Chat with 18+ AI providers using your own API keys — keys stay on your device, calls go directly from client to provider. No middleman, no data collection.
 
-This project keeps the useful product direction from the older Mio codebase: BYOK, provider switching, secure local key storage, project-style organization, direct AI calls, and optional Supabase sync. The old UI has been ditched.
+---
 
-## What this rebuild ditches
+## Features
 
-The rebuild removes the generic Material-heavy UI, heavy payment/connector/scheduled-task dependencies, and server-first chat flow. The app is now leaner: chat calls go directly from the Flutter client to the selected AI provider using the user's own API key.
+- **18+ AI Providers** — OpenAI, Anthropic (Claude), Google Gemini, Groq, Mistral, DeepSeek, Kimi, Ollama, OpenRouter, and more
+- **Direct API Calls** — Client calls providers directly; no custom server in the critical path
+- **Secure Local Key Storage** — API keys stored with `flutter_secure_storage`, never logged or synced
+- **Cross-Platform** — macOS, Windows, Linux, Web, iOS, and Android from a single Flutter codebase
+- **Provider Selector** — Switch between providers per-chat with per-provider model menus
+- **Project Organization** — Organize chats into projects; full local chat persistence
+- **Rich Onboarding** — 8-step onboarding flow with Lottie splash animation
+- **Connectors** — Camera, Gallery, Documents, Link, Web Search (DuckDuckGo), GitHub repo search, Notion search, Gmail
+- **Optional Supabase Sync** — Auth and encrypted sync via Supabase (off by default; no keys ever reach the cloud)
+- **Premium UI** — Cream/light-grey + Persian-orange design system, Google Fonts, Shimmer loading states, Framer-quality animations
 
-## Current MVP features
+---
 
-| Area | Status |
-| --- | --- |
-| Premium desktop-first UI | Implemented |
-| Cream/light-grey + Persian orange theme | Implemented |
-| BYOK secure local key storage | Implemented |
-| Provider selector | Implemented |
-| OpenAI-compatible providers | Implemented |
-| Anthropic direct API | Implemented |
-| Gemini direct API | Implemented |
-| Local chat persistence | Implemented |
-| Supabase schema | Included |
-| Supabase runtime init | Optional via dart-define |
-| Railway backend | Optional placeholder via dart-define |
+## Architecture
 
-## Run locally
+```
+omnimind-byok/
+├── lib/                        # Flutter app source (Dart)
+│   ├── providers/              # Riverpod state providers
+│   ├── screens/                # Splash, Welcome, Onboarding, Chat
+│   ├── widgets/                # Reusable UI components
+│   ├── connectors/             # Camera, Docs, Web Search, GitHub, Notion, Gmail
+│   ├── services/               # AI provider clients, secure storage, Supabase
+│   └── router.dart             # go_router — 4 routes: /, /welcome, /onboarding, /chat
+├── backend/                    # Optional Python backend (Railway)
+├── android/ ios/ macos/        # Platform-specific shells
+│   windows/ linux/ web/
+├── assets/
+│   ├── animations/             # Lottie (mascot.json)
+│   └── icons/providers/        # Provider logo assets
+└── pubspec.yaml
+```
 
-Flutter is required on your machine.
+### App Flow
+
+```
+Splash (/)  ──►  Welcome/Login (/welcome)  ──►  8-step Onboarding (/onboarding)  ──►  Chat (/chat)
+```
+
+### AI Call Flow
+
+```
+Flutter UI  ──►  Provider service (Dio)  ──►  OpenAI / Anthropic / Gemini / … API
+                 (user's own key, no server hop)
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Flutter 3.x, Dart 3.8 |
+| State Management | Riverpod 2.x |
+| Routing | go_router 14 |
+| HTTP Client | Dio 5 |
+| Secure Storage | flutter_secure_storage 9 |
+| Auth / Sync (optional) | Supabase Flutter 2 |
+| Animations | Lottie 3, Shimmer 3 |
+| Web / In-App Content | webview_flutter 4 |
+| Markdown Rendering | flutter_markdown |
+| Fonts | Google Fonts |
+| File / Media | file_picker, image_picker, path_provider |
+| Permissions | permission_handler |
+| Optional Backend | Python (FastAPI), Railway |
+
+---
+
+## AI Providers
+
+| Provider | Integration |
+|---|---|
+| OpenAI | Direct REST (gpt-4o, gpt-4, gpt-3.5-turbo, …) |
+| Anthropic | Direct REST (claude-3-5-sonnet, claude-3-opus, …) |
+| Google Gemini | Direct REST (gemini-1.5-pro, gemini-1.5-flash, …) |
+| Groq | OpenAI-compatible (llama-3, mixtral, …) |
+| Mistral | Direct REST |
+| DeepSeek | OpenAI-compatible |
+| Kimi | OpenAI-compatible |
+| Ollama | Local inference (any model) |
+| OpenRouter | Multi-provider gateway |
+
+---
+
+## Connectors
+
+| Connector | Implementation |
+|---|---|
+| Camera | `image_picker` — native camera capture |
+| Gallery | `image_picker` — native photo library |
+| Documents | `file_picker` — any file type |
+| Link | URL input dialog |
+| Web Search | DuckDuckGo Instant Answer API (no key needed) |
+| GitHub | GitHub Search API (optional token for rate limits) |
+| Notion | Notion Search API (token via secure storage) |
+| Gmail | Gmail messages API (Google OAuth token via secure storage) |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Flutter SDK 3.x (`flutter --version`)
+- Dart 3.8+
+
+### Run
 
 ```bash
 flutter pub get
-flutter run -d macos
+flutter run -d macos        # or -d windows / -d chrome / -d android
 ```
 
-With Supabase:
+### With Supabase (optional)
 
 ```bash
 flutter run -d macos \
@@ -43,26 +133,32 @@ flutter run -d macos \
   --dart-define=SUPABASE_ANON_KEY=your-anon-key
 ```
 
-## Supabase setup
+Run `supabase_schema.sql` in your Supabase SQL editor to create the schema (projects, chats, messages, provider metadata). API keys are **never** stored in Supabase.
 
-Run `supabase_schema.sql` in your Supabase SQL editor. The schema stores projects, chats, messages, and provider metadata. It does **not** store API keys.
+---
 
-## Credential TODOs
+## Security Model
 
-| Area | Needed before live use |
-| --- | --- |
-| Supabase | `SUPABASE_URL` and `SUPABASE_ANON_KEY` for auth, database, and optional encrypted sync. |
-| Google Login | Google OAuth client ID/secret, consent screen, and Supabase redirect URL setup. |
-| Apple Login | Apple Services ID, Team ID, Key ID, private key, and Supabase redirect URL setup. |
-| Notion Connector | Notion integration token or OAuth app credentials. |
-| Gmail Connector | Google OAuth setup with Gmail API access and approved scopes. |
+- API keys are stored only in `flutter_secure_storage` on the local device
+- Keys are never logged, synced, or sent to a custom backend
+- AI calls go directly from the Flutter client to the provider
+- Supabase sync is opt-in and does not include key material
 
-The current startup/onboarding flow is **Splash → Welcome/Login → 8-step Onboarding → Chat**. The router has **four total app routes**: `/`, `/welcome`, `/onboarding`, and `/chat`.
+---
 
-## Security rule
+## Credential Requirements (for full feature set)
 
-Provider keys are stored locally with `flutter_secure_storage`. They should not be logged, synced, or sent to a custom backend. The app calls providers directly from the client.
+| Feature | Credential Needed |
+|---|---|
+| Supabase auth + sync | `SUPABASE_URL`, `SUPABASE_ANON_KEY` via dart-define |
+| Google Login | Google OAuth client ID/secret + Supabase redirect URL |
+| Apple Login | Apple Services ID, Team ID, Key ID, private key + redirect URL |
+| Notion connector | Notion integration token (`connector_token_notion`) |
+| Gmail connector | Google OAuth access token (`connector_token_gmail`) |
+| GitHub connector | Optional token (`connector_token_github`) for higher rate limits |
 
-## Next build steps
+---
 
-The next stage is to connect authenticated Supabase sync, add real project CRUD, add a polished key-management screen, and replace the placeholder attach button with document ingestion.
+## License
+
+MIT
